@@ -1,5 +1,9 @@
 # A resumed session can write a sequence the log will not reload
 
+> **Fixed.** Writer counts from the newest seq instead of the entry count, and
+> the reader renumbers a backwards seam in memory instead of refusing the file.
+> See `## Fix` at the end.
+
 Found by resuming a real session in the shipped binary, not by any test: the
 fixtures all describe well-formed logs, so nothing in the suite could see this.
 
@@ -66,3 +70,25 @@ foldcode --resume sess_nlvcx59jspmv9nbtouplqux1   # in /Users/umang/hub/fold
 
 Any log whose seq is not exactly its line index minus one reproduces the read
 side.
+
+## Fix
+
+Two halves, because there were two defects.
+
+**Writer** (`JsonlLayer.ts`, `nextSeq`). The append took its sequence from
+`current.length`, which is only the right answer while the in-memory array is a
+complete prefix of the file. A resume that loaded a short view of its own log
+therefore reused a sequence already on disk. It now counts from the newest
+entry's seq, which cannot collide whatever the load returned.
+
+**Reader** (`decodeJsonlLine`). It required `seq === lineNumber - 1`, so one bad
+append condemned every entry written before it and the session became
+permanently unopenable while still listing in the picker. The invariant a reader
+actually depends on is that sequences advance. A backwards seam is now
+renumbered in memory, re-decoded through the schema so the repair cannot smuggle
+a value the schema would reject. The file on disk is left alone.
+
+Verified on the real session that prompted this: `sess_nlvcx59jspmv9nbtouplqux1`
+now opens, showing both of its subagents, and the entries it appended afterwards
+continue from 61 rather than reusing 32. The backwards seam at line 58 is still
+in the file, which is the point: recovery is read-only.

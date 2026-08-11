@@ -56,7 +56,26 @@ const jsonlLines = (contents: string): ReadonlyArray<string> => {
 	return contents.split('\n')
 }
 
-const decodeJsonlLine = (line: string, lineNumber: number): Effect.Effect<LogEntry, EventLogCorruptEntryError> =>
+/**
+ * The same entry at a corrected sequence, re-decoded so the renumbering cannot
+ * smuggle a value the schema would reject.
+ */
+const renumbered = (
+	entry: LogEntry,
+	seq: number,
+	lineNumber: number,
+): Effect.Effect<LogEntry, EventLogCorruptEntryError> =>
+	Schema.decodeUnknownEffect(LogEntrySchema)({ ...entry, seq }).pipe(
+		Effect.mapError((cause) =>
+			corruptEntryError(lineNumber, `Unable to renumber EventLog entry at line ${lineNumber}`, cause),
+		),
+	)
+
+const decodeJsonlLine = (
+	line: string,
+	lineNumber: number,
+	previousSeq: number | null,
+): Effect.Effect<LogEntry, EventLogCorruptEntryError> =>
 	Effect.gen(function* () {
 		if (line.length === 0) {
 			return yield* corruptEntryError(lineNumber, `Empty JSONL line at line ${lineNumber}`)
@@ -71,22 +90,34 @@ const decodeJsonlLine = (line: string, lineNumber: number): Effect.Effect<LogEnt
 				corruptEntryError(lineNumber, `Invalid EventLog entry at line ${lineNumber}`, cause),
 			),
 		)
-		const expectedSeq = lineNumber - 1
-
-		if (entry.seq !== expectedSeq) {
-			return yield* corruptEntryError(
-				lineNumber,
-				`Invalid EventLog sequence at line ${lineNumber}: expected ${expectedSeq}, got ${entry.seq}`,
-				undefined,
-				entry.seq,
-			)
+		// The invariant a reader depends on is that sequences advance, not that
+		// they match the line index. Requiring equality made one bad append
+		// condemn the whole conversation, including every entry written before
+		// it.
+		//
+		// A sequence that goes backwards is a real defect, but the entries either
+		// side of the seam are intact and in time order, so refusing to open the
+		// file costs the user the conversation to punish a number. The entry is
+		// renumbered in memory instead; the file on disk is left alone, and the
+		// next append continues past the highest seq seen.
+		if (previousSeq !== null && entry.seq <= previousSeq) {
+			return yield* renumbered(entry, previousSeq + 1, lineNumber)
 		}
 
 		return entry
 	})
 
 const decodeJsonl = (contents: string): Effect.Effect<ReadonlyArray<LogEntry>, EventLogCorruptEntryError> =>
-	Effect.forEach(jsonlLines(contents), (line, index) => decodeJsonlLine(line, index + 1), { concurrency: 1 })
+	Effect.gen(function* () {
+		const decoded: Array<LogEntry> = []
+		let previousSeq: number | null = null
+		for (const [index, line] of jsonlLines(contents).entries()) {
+			const entry: LogEntry = yield* decodeJsonlLine(line, index + 1, previousSeq)
+			decoded.push(entry)
+			previousSeq = entry.seq
+		}
+		return decoded
+	})
 
 const encodeJsonlLine = (entry: LogEntry): Effect.Effect<string, EventLogInvalidEntryError> =>
 	Effect.gen(function* () {
@@ -174,11 +205,28 @@ export const layerJsonl = (filePath: string): Layer.Layer<EventLog, EventLogErro
 			const pubsub = yield* PubSub.unbounded<LogEntry>()
 			const appendLock = yield* Semaphore.make(1)
 
+			/**
+			 * The next sequence number, taken from the newest entry rather than
+			 * from how many entries are in hand.
+			 *
+			 * `current.length` is only the right answer while the in-memory array
+			 * is a complete prefix of the file. A session recorded on 2026-08-11
+			 * resumed with a short view of its own log and wrote seq 28 after seq
+			 * 56, which the reader rejects (`seq === lineNumber - 1`), so the whole
+			 * conversation became unopenable while still listing in the picker.
+			 * Counting from the last seq cannot produce a number already on disk,
+			 * whatever the load returned.
+			 */
+			const nextSeq = (entries: ReadonlyArray<LogEntry>): number => {
+				const newest = entries.at(-1)
+				return newest === undefined ? 0 : newest.seq + 1
+			}
+
 			const append = Effect.fn('fold.event_log.jsonl.append')((input: LogEntryInput) =>
 				appendLock.withPermit(
 					Effect.gen(function* () {
 						const current = yield* Ref.get(entriesRef)
-						const stored = yield* makeStoredLogEntry(input, current.length)
+						const stored = yield* makeStoredLogEntry(input, nextSeq(current))
 						const line = yield* encodeJsonlLine(stored)
 
 						yield* appendJsonlLine(fs, filePath, line)

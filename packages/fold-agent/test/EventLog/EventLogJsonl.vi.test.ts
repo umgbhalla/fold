@@ -100,6 +100,112 @@ it.effect('jsonl layer maps invalid persisted lines to EventLogCorruptEntryError
 	).pipe(Effect.provide(NodeFileSystem.layer)),
 )
 
+/**
+ * The defect that made a real session permanently unopenable: a resume wrote a
+ * sequence that restarted mid-file (0..56, then 28..31). The reader required
+ * `seq === lineNumber - 1`, so one bad append condemned every entry written
+ * before it too.
+ */
+it.effect('jsonl layer reads a log whose sequence advances with gaps', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'gapped.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				yield* log.append(makeToolState(1))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			// Rewrite the second entry with a seq that skips ahead, which is what a
+			// log carrying a gap looks like on disk.
+			const [first, second] = (yield* fs.readFileString(filePath)).split('\n').filter((l) => l.length > 0)
+			const jumped = JSON.stringify({ ...JSON.parse(second ?? '{}'), seq: 41 })
+			yield* fs.writeFileString(filePath, `${first}\n${jumped}\n`)
+
+			const entries = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* Stream.runCollect(log.entries())
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			expect(Array.from(entries).map((entry) => entry.seq)).toEqual([0, 41])
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
+
+/**
+ * A backwards sequence is a real defect, but the entries either side of the seam
+ * are intact and time-ordered, so the reader renumbers rather than refusing to
+ * open the conversation. This is the shape that made a real session unopenable.
+ */
+it.effect('jsonl layer recovers a sequence that goes backwards', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'backwards.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				yield* log.append(makeToolState(1))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			const [first, second] = (yield* fs.readFileString(filePath)).split('\n').filter((l) => l.length > 0)
+			const backwards = JSON.stringify({ ...JSON.parse(second ?? '{}'), seq: 0 })
+			yield* fs.writeFileString(filePath, `${first}\n${backwards}\n`)
+
+			const entries = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* Stream.runCollect(log.entries())
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			// Both entries survive, and the second is renumbered past the first.
+			expect(Array.from(entries).map((entry) => entry.seq)).toEqual([0, 1])
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
+
+/**
+ * The writer half. Appending after reopening a gapped log must not reuse a
+ * sequence already on disk, which is what `current.length` did.
+ */
+it.effect('jsonl layer appends past the newest sequence, not the entry count', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'resumed.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				yield* log.append(makeToolState(1))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			const [first, second] = (yield* fs.readFileString(filePath)).split('\n').filter((l) => l.length > 0)
+			const jumped = JSON.stringify({ ...JSON.parse(second ?? '{}'), seq: 41 })
+			yield* fs.writeFileString(filePath, `${first}\n${jumped}\n`)
+
+			const appended = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* log.append(makeToolState(2))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			expect(appended.seq).toBe(42)
+
+			// And the file it just wrote is readable again.
+			const reread = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* Stream.runCollect(log.entries())
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+			expect(Array.from(reread).map((entry) => entry.seq)).toEqual([0, 41, 42])
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
+
 it.effect('jsonl layer replays assistant usage when cache fields are absent', () =>
 	Effect.scoped(
 		Effect.gen(function* () {
