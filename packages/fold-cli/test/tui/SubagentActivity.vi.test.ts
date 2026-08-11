@@ -1,4 +1,12 @@
-import { AgentId, MessageId, ToolCallId, type LogEntry } from '@humanlayer/fold-core'
+import {
+	AgentId,
+	MessageId,
+	ToolCallId,
+	type AgentFinishedLogEntry,
+	type AssistantMessageLogEntry,
+	type LogEntry,
+	type ToolResultLogEntry,
+} from '@humanlayer/fold-core'
 import { describe, expect, it } from 'vitest'
 
 import { expandedRowHeight, subagentActivity, toolCallSummaryLine } from '../../src/tui/SubagentActivity'
@@ -9,49 +17,51 @@ const messageId = MessageId.make('msg_aaaaaaaaaaaaaaaaaaaaaaaa')
 const callId = ToolCallId.make('tool_call_aaaaaaaaaaaaaaaaaaaaaaaa')
 const otherCallId = ToolCallId.make('tool_call_bbbbbbbbbbbbbbbbbbbbbbbb')
 
-const toolCall = (seq: number, id: ToolCallId, name: string, params: unknown): LogEntry =>
-	({
-		_tag: 'assistant-message',
-		seq,
-		ts: seq * 1_000,
-		agentId,
-		parentAgentId: null,
-		toolCallId: null,
-		messageId,
-		message: {
-			role: 'assistant',
-			content: [{ type: 'tool-call', id, name, params, providerExecuted: false }],
-		},
-		finish: null,
-	}) as unknown as LogEntry
+const toolCall = (seq: number, id: ToolCallId, name: string, params: unknown): AssistantMessageLogEntry => ({
+	_tag: 'assistant-message',
+	seq,
+	ts: seq * 1_000,
+	agentId,
+	parentAgentId: null,
+	toolCallId: null,
+	messageId,
+	message: {
+		role: 'assistant',
+		content: [{ type: 'tool-call', id, name, params, providerExecuted: false }],
+	},
+	finish: null,
+})
 
-const toolResult = (seq: number, id: ToolCallId, name: string, result: unknown): LogEntry =>
-	({
-		_tag: 'tool-result',
-		seq,
-		ts: seq * 1_000,
-		agentId,
-		parentAgentId: null,
-		toolCallId: id,
-		messageId,
-		message: {
-			role: 'tool',
-			content: [{ type: 'tool-result', id, name, result, isFailure: false }],
-		},
-	}) as unknown as LogEntry
+const toolResult = (seq: number, id: ToolCallId, name: string, result: unknown): ToolResultLogEntry => ({
+	_tag: 'tool-result',
+	seq,
+	ts: seq * 1_000,
+	agentId,
+	parentAgentId: null,
+	toolCallId: id,
+	messageId,
+	message: {
+		role: 'tool',
+		content: [{ type: 'tool-result', id, name, result, isFailure: false }],
+	},
+})
 
-const finished = (seq: number, outcome: string, resultText: string | null, reason: string | null): LogEntry =>
-	({
-		_tag: 'agent-finished',
-		seq,
-		ts: seq * 1_000,
-		agentId,
-		parentAgentId: null,
-		toolCallId: null,
-		outcome,
-		resultText,
-		reason,
-	}) as unknown as LogEntry
+const finished = (
+	seq: number,
+	outcome: AgentFinishedLogEntry['outcome'],
+	resultText: string | null,
+	reason: string | null,
+): AgentFinishedLogEntry => ({
+	_tag: 'agent-finished',
+	seq,
+	ts: seq * 1_000,
+	agentId,
+	parentAgentId: null,
+	toolCallId: null,
+	outcome,
+	resultText,
+	reason,
+})
 
 const view = (entries: ReadonlyArray<LogEntry>, status: SubagentStatus = 'running'): SubagentView => ({
 	agentId,
