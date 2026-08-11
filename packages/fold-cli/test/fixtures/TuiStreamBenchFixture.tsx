@@ -174,9 +174,11 @@ await new Promise((resolve) => setTimeout(resolve, 1500))
  */
 let painted = 0
 let applyTotal = 0
+let reduceTotal = 0
 const cpuBefore = process.cpuUsage()
 const started = performance.now()
 const frameTimes: Array<number> = []
+const rowCountProbe = (): number => state.transientContent.length + state.rootContent.length
 let lastFrameAt = started
 
 await new Promise<void>((resolve) => {
@@ -187,25 +189,31 @@ await new Promise<void>((resolve) => {
 			return
 		}
 		painted += 1
-		const applyStart = performance.now()
-		setState(
-			reconcile(
-				reduceSessionEvents(
-					state,
-					[
-						{
-							kind: 'delta',
-							agentId: rootAgentId,
-							parentAgentId: null,
-							toolCallId: null,
-							part: { type: 'text-delta', id: 'stream', delta: 'token ' },
-						},
-					],
-					rootAgentId,
-				),
-			),
+		const reduceStart = performance.now()
+		const nextState = reduceSessionEvents(
+			state,
+			[
+				{
+					kind: 'delta',
+					agentId: rootAgentId,
+					parentAgentId: null,
+					toolCallId: null,
+					part: { type: 'text-delta', id: 'stream', delta: 'token ' },
+				},
+			],
+			rootAgentId,
 		)
+		reduceTotal += performance.now() - reduceStart
+		const applyStart = performance.now()
+		// The same write the app makes (HostedTuiSession).
+		setState(reconcile(nextState))
+
 		applyTotal += performance.now() - applyStart
+		// The store write returns before solid has run the effects it scheduled, so
+		// `apply` alone would credit the render work to nothing. Reading a memo
+		// that depends on the transcript forces that work to happen inside the
+		// window being measured.
+		void rowCountProbe()
 		// Per-frame wall time, so a cost that grows with the streamed text shows up
 		// as a rising curve rather than an average that hides it.
 		const now = performance.now()
@@ -232,6 +240,6 @@ renderer.destroy()
 // stream the renderer has taken over.
 await Bun.write(
 	process.env.FOLD_BENCH_OUT ?? '/tmp/fold-bench.txt',
-	`rows=${rowCount} agents=${agentCount} entries=${state.allEntries.length} frames=${painted} apply=${applyTotal.toFixed(0)}ms wall=${wall.toFixed(0)}ms streamCpu=${((cpu.user + cpu.system) / 1000).toFixed(0)}ms fps=${(painted / (wall / 1000)).toFixed(1)} firstQuarter=${(frameTimes.slice(0, Math.floor(frameTimes.length / 4)).reduce((a, b) => a + b, 0) / Math.floor(frameTimes.length / 4)).toFixed(1)}ms lastQuarter=${(frameTimes.slice(-Math.floor(frameTimes.length / 4)).reduce((a, b) => a + b, 0) / Math.floor(frameTimes.length / 4)).toFixed(1)}ms\n`,
+	`rows=${rowCount} agents=${agentCount} entries=${state.allEntries.length} frames=${painted} reduce=${reduceTotal.toFixed(0)}ms apply=${applyTotal.toFixed(0)}ms wall=${wall.toFixed(0)}ms streamCpu=${((cpu.user + cpu.system) / 1000).toFixed(0)}ms fps=${(painted / (wall / 1000)).toFixed(1)} firstQuarter=${(frameTimes.slice(0, Math.floor(frameTimes.length / 4)).reduce((a, b) => a + b, 0) / Math.floor(frameTimes.length / 4)).toFixed(1)}ms lastQuarter=${(frameTimes.slice(-Math.floor(frameTimes.length / 4)).reduce((a, b) => a + b, 0) / Math.floor(frameTimes.length / 4)).toFixed(1)}ms\n`,
 )
 process.exit(0)
