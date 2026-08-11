@@ -77,3 +77,27 @@ describe('contextMode', () => {
 		expect(contextMode({ ...at('events'), selectedKey: 'b' }, ['a', 'b'])).toBe('live')
 	})
 })
+
+/**
+ * A real session starts with the composer focused, which the fixtures did not,
+ * so this path was never exercised: every plain key belongs to the message
+ * being typed, and `l` cannot mean "next pane" while someone is writing the
+ * word "hello". That left escape as the only way out of the composer, and
+ * escape at the pane level leaves the session, so reaching the rail from a
+ * fresh session meant a detour through the session list.
+ *
+ * Ctrl+arrow is not a character, so it can move panes mid-word.
+ */
+describe('leaving the composer', () => {
+	it('moves to the next pane on ctrl+right without consuming a letter', () => {
+		const panes = ['events', 'context', 'subagents'] as const
+		const start = { pane: 'events' as const, level: 'input' as const, selectedKey: null }
+		expect(movePane(start, 1, panes).pane).toBe('context')
+	})
+
+	it('moves back on ctrl+left', () => {
+		const panes = ['events', 'context', 'subagents'] as const
+		const start = { pane: 'context' as const, level: 'input' as const, selectedKey: null }
+		expect(movePane(start, -1, panes).pane).toBe('events')
+	})
+})

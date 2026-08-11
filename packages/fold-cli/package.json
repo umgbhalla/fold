@@ -31,7 +31,8 @@
 		"test:watch": "bun vitest",
 		"tui:sheet": "bun run scripts/tui-sheet.ts",
 		"tui:bench": "bash scripts/tui-stream-bench.sh",
-		"tui:bench:live": "bash scripts/tui-acceptance-bench.sh"
+		"tui:bench:live": "bash scripts/tui-acceptance-bench.sh",
+		"install:local": "bash scripts/install-local.sh"
 	},
 	"dependencies": {
 		"@opentui/core": "catalog:",
