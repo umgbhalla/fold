@@ -196,6 +196,41 @@ describe('subagentActivity', () => {
 	})
 })
 
+describe('shapes taken from recorded sessions', () => {
+	/**
+	 * Real logs carry `''` rather than `null` for the field that does not apply,
+	 * so a failed agent has `resultText: ''` alongside its reason and a completed
+	 * one has `reason: ''`. Falling back on nullishness alone would render the
+	 * empty string and the row would show a blank outcome line.
+	 */
+	it('reports a failed agent whose result text is empty rather than null', () => {
+		const activity = subagentActivity(
+			view([finished(3, 'error', '', 'OpenAiClient.createResponseStream: Invalid output: Missing key')], 'error'),
+			10_000,
+		)
+		expect(activity.outcomeText).toBe('OpenAiClient.createResponseStream: Invalid output: Missing key')
+	})
+
+	it('reports a completed agent whose reason is empty rather than null', () => {
+		const activity = subagentActivity(view([finished(3, 'completed', 'Exit status: 0', '')], 'done'), 10_000)
+		expect(activity.outcomeText).toBe('Exit status: 0')
+	})
+
+	/** Results come back as markdown with fences and hard breaks. */
+	it('flattens a multi-line markdown result onto one line', () => {
+		const activity = subagentActivity(
+			view([finished(3, 'completed', 'Exit status: `0`\n\n```text\nhi\n```', null)], 'done'),
+			10_000,
+		)
+		expect(activity.outcomeText).toBe('Exit status: `0` ```text hi ```')
+		expect(activity.outcomeText).not.toContain('\n')
+	})
+
+	it('has no outcome text when both fields are empty', () => {
+		expect(subagentActivity(view([finished(3, 'completed', '', '')], 'done'), 10_000).outcomeText).toBeNull()
+	})
+})
+
 describe('expandedRowHeight', () => {
 	it('reserves two lines when there is nothing to detail', () => {
 		expect(expandedRowHeight(subagentActivity(view([]), 1_000))).toBe(2)
