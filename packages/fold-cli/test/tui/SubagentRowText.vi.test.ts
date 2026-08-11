@@ -52,6 +52,36 @@ describe('collapsedRowCells', () => {
 		expect(one).not.toBe(twelve)
 	})
 
+	/**
+	 * The defect the rail was rebuilt to fix, pinned at the widths where it
+	 * actually bit. At 26 columns the description happens to fit, so a row that
+	 * wrongly treats it as droppable still looks correct there; only a width that
+	 * forces something out distinguishes "the decoration goes" from "the subject
+	 * goes". Fifteen agents rendering as `▌  57y  ◓ RUNNING` is what this stops.
+	 */
+	it('keeps the description at widths that force something out', () => {
+		for (const width of [10, 12, 14, 16, 20]) {
+			const line = collapsed(view({ description: 'Overflow task 12', type: 'general-purpose' }), width)
+			expect(line, `width ${width}`).toMatch(/[A-Za-z]/)
+			expect(line.replace(/[^A-Za-z]/g, '').length, `width ${width}: ${line}`).toBeGreaterThanOrEqual(3)
+		}
+	})
+
+	it('never renders two different agents identically', () => {
+		for (const width of [10, 12, 14, 16, 20, 26]) {
+			const first = collapsed(view({ description: 'Overflow task 1', type: 'general-purpose' }), width)
+			const second = collapsed(view({ description: 'Overflow task 12', type: 'general-purpose' }), width)
+			expect(first, `width ${width}`).not.toBe(second)
+		}
+	})
+
+	it('spends its last columns on the description, not the decoration', () => {
+		// At a width that cannot hold everything, the type and age are what go.
+		const line = collapsed(view({ description: 'Overflow task 12', type: 'general-purpose' }), 12)
+		expect(line).toContain('12')
+		expect(line).not.toContain('gp')
+	})
+
 	it('abbreviates a multi-word agent type to its initials', () => {
 		expect(collapsed(view({ type: 'general-purpose' }), 40)).toContain('gp')
 	})

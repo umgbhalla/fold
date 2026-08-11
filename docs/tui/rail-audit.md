@@ -181,8 +181,10 @@ What was built, and where it is verified.
 
 **Rail.** One line per subagent; the selected row expands in place to show
 turns, tools, whether a tool is running and for how long, and the result or
-failure reason. Fourteen agents plus one expansion fit in seventeen rows where
-the old rail needed twenty-eight for less.
+failure reason. Measured against the overflow fixture at 160x40: fifteen agents
+plus the selected one's stats line plus the tally occupy seventeen rows. The old
+rail spent two rows per agent, so the same fifteen cost thirty and the second row
+carried only the agent's type.
 
 **META is gone.** Its four scalars are one line in the header, its histograms
 are one tally line at the foot of the rail, and `MetaRail.tsx` is deleted. The
