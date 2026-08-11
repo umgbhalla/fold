@@ -54,7 +54,9 @@ import { markChangeViewed } from './ViewedChanges'
  * frame. `setBackgroundColor()` clears only `nextRenderBuffer`, which is not
  * enough to invalidate the diff.
  */
-const forceFullRepaint = (renderer: ReturnType<typeof createCliRenderer> extends Promise<infer R> ? R : never): void => {
+const forceFullRepaint = (
+	renderer: ReturnType<typeof createCliRenderer> extends Promise<infer R> ? R : never,
+): void => {
 	renderer.currentRenderBuffer.clear()
 	renderer.requestRender()
 }
@@ -93,7 +95,10 @@ export const runTui = (
 		const renderer = yield* Effect.tryPromise({
 			try: () =>
 				createCliRenderer({
-					targetFps: 30,
+					// 60 matches opencode: opentui coalesces a token burst into one frame
+					// clamped to 1000/targetFps, so a higher cap only lowers latency.
+					targetFps: 60,
+					gatherStats: false,
 					exitOnCtrlC: false,
 					consoleMode: 'disabled',
 					useKittyKeyboard: {},

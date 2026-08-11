@@ -199,7 +199,10 @@ export const makeHostedTuiSession = (
 		}
 
 		const drain = session.events(replayHead + 1).pipe(
-			Stream.groupedWithin(1024, Duration.millis(16)),
+			// The projection is now incremental, so a shorter window costs almost
+			// nothing and the stream reads closer to the model's own pace. opentui
+			// still clamps painting to one frame per 1000/targetFps.
+			Stream.groupedWithin(1024, Duration.millis(8)),
 			Stream.runForEach((events) =>
 				Effect.sync(() => {
 					const next = reduceSessionEvents(state, events, session.rootAgentId)

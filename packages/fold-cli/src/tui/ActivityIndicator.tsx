@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal, onCleanup } from 'solid-js'
+import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js'
 
 import { theme } from './ThemeState'
 
@@ -32,10 +32,14 @@ export const ActivityIndicator = (props: {
 	readonly width?: number
 }) => {
 	const [frame, setFrame] = createSignal(0)
-	const timer = setInterval(() => {
-		if (props.state === 'running' || props.state === 'compacting') setFrame((current) => current + 1)
-	}, 180)
-	onCleanup(() => clearInterval(timer))
+	// The timer is armed only while there is motion to show. An idle session used
+	// to wake the renderer ~5.5 times a second for a glyph that never changed.
+	const animating = createMemo(() => props.state === 'running' || props.state === 'compacting')
+	createEffect(() => {
+		if (!animating()) return
+		const timer = setInterval(() => setFrame((current) => current + 1), 180)
+		onCleanup(() => clearInterval(timer))
+	})
 
 	return (
 		<text

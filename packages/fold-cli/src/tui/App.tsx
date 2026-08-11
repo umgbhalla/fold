@@ -30,8 +30,10 @@ import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
 import {
 	conversationRows,
+	durableConversationRows,
 	makeSessionStateFromEntries,
 	replayIsReady,
+	transientConversationRows,
 	type ConversationRow,
 	type SessionState,
 } from './SessionState'
@@ -143,7 +145,13 @@ export const TuiApp = (props: TuiAppProps) => {
 	onCleanup(removeInputKeymap)
 	onCleanup(removeTargetInputKeymap)
 	onCleanup(() => clearInterval(relativeTimeTimer))
-	const rows = createMemo(() => conversationRows(props.state()))
+	/**
+	 * Split so a token delta only rebuilds the streaming tail. The durable half
+	 * recomputes when the log grows, not on every 16 ms batch.
+	 */
+	const durableRows = createMemo(() => durableConversationRows(props.state()))
+	const transientRows = createMemo(() => transientConversationRows(props.state()))
+	const rows = createMemo(() => [...durableRows(), ...transientRows()])
 	const gitSnapshot = createMemo<GitSnapshot>(() => props.gitSnapshot?.() ?? { _tag: 'ready', files: [] })
 	const changes = createMemo(() => {
 		const snapshot = gitSnapshot()

@@ -112,7 +112,11 @@ export const EventRow = (props: { readonly row: Accessor<ConversationRow> }) => 
 			paddingTop={isMessage() ? 1 : 0}
 		>
 			<box width={3} flexShrink={0}>
-				<text fg={visual().color} attributes={isUser() ? TextAttributes.BOLD : TextAttributes.NONE} wrapMode="none">
+				<text
+					fg={visual().color}
+					attributes={isUser() ? TextAttributes.BOLD : TextAttributes.NONE}
+					wrapMode="none"
+				>
 					{visual().glyph}
 				</text>
 			</box>
@@ -131,7 +135,11 @@ export const EventRow = (props: { readonly row: Accessor<ConversationRow> }) => 
 				{rendersMarkdown() ? (
 					<MarkdownText content={props.row().text} tone={visual().dim ? 'muted' : 'normal'} />
 				) : (
-					<text fg={isUser() ? tactical.color.coreBright : bodyColor()} attributes={bodyAttributes()} wrapMode="word">
+					<text
+						fg={isUser() ? tactical.color.coreBright : bodyColor()}
+						attributes={bodyAttributes()}
+						wrapMode="word"
+					>
 						{props.row().text}
 					</text>
 				)}
