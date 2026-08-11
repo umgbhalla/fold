@@ -120,6 +120,50 @@ terminalDescribe('TUI terminal behavior', () => {
 		expect(await session.waitForExit({ timeoutMs: 5_000 })).toMatchObject({ reason: 'exited', exit: { code: 0 } })
 	}, 45_000)
 
+	/**
+	 * Creating a session focuses the composer (opening an existing one does not),
+	 * and no fixture did that before, so the key handling that differs there was
+	 * never covered: `l` is a letter to a focused composer rather than a pane
+	 * move. `FOLD_TUI_INPUT_FOCUSED_FIXTURE=1` reproduces that starting state.
+	 *
+	 * This asserts the half that is stable under the harness: with the composer
+	 * focused, `l` must not move panes. The recovery path after Escape is
+	 * verified against the shipped binary instead, because the harness re-enters
+	 * the composer on the next keypress in a way the real terminal does not, and
+	 * a test that encodes the harness's behaviour would be asserting fiction.
+	 *
+	 * Mutation-checked twice, because the first attempt was decorative. Adding
+	 * `l` to the pane-move branch inside the composer guard does NOT fail this
+	 * test: the focused editor consumes the key upstream, so that branch is
+	 * unreachable by typing. Disabling the composer guard entirely does fail it.
+	 * What is actually pinned, then, is that a focused composer keeps the
+	 * keyboard, which is the property that matters.
+	 */
+	it('does not move panes when l is typed into a focused composer', async () => {
+		await using session = await terminal.launch({
+			command: ['bun', '--preload', '@opentui/solid/preload', 'test/fixtures/TuiAppFixture.tsx'],
+			cwd: import.meta.dirname.replace(/\/test$/, ''),
+			host: 'opentui',
+			viewport: { cols: 160, rows: 44 },
+			record: 'on-failure',
+			env: { FOLD_TUI_INPUT_FOCUSED_FIXTURE: '1', FOLD_TUI_OVERFLOW_SUBAGENTS_FIXTURE: '1' },
+		})
+
+		await session.screen.waitForText('SUBAGENTS', { timeoutMs: 10_000 })
+		const before = await session.screen.capture({ settleMs: 150, deadlineMs: 5_000, allowIncomplete: true })
+		expect(before.text, 'the composer starts focused').toContain('EVENTS · [FOCUSED]')
+		// The rail is a sidebar, so its metadata is two summary lines.
+		expect(before.text).toContain('researcher')
+		expect(before.text).not.toContain('AGENT TYPES')
+
+		await session.keyboard.type('l')
+		const after = await session.screen.capture({ settleMs: 200, deadlineMs: 5_000, allowIncomplete: true })
+		expect(after.text, 'l belongs to the message, not to pane navigation').toContain('EVENTS · [FOCUSED]')
+		expect(after.text, 'the rail must not expand from a keystroke meant for the composer').not.toContain(
+			'AGENT TYPES',
+		)
+	}, 45_000)
+
 	it('focuses a subagent and targets its steer and interrupt actions', async () => {
 		await using session = await terminal.launch({
 			command: ['bun', '--preload', '@opentui/solid/preload', 'test/fixtures/TuiAppFixture.tsx'],

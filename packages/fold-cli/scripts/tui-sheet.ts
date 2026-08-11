@@ -36,6 +36,11 @@ const fixtures: Readonly<Record<string, Fixture>> = {
 	event: { file: 'test/fixtures/TuiAppFixture.tsx', env: { FOLD_TUI_EVENT_SUBAGENT_FIXTURE: '1' } },
 	overflow: { file: 'test/fixtures/TuiAppFixture.tsx', env: { FOLD_TUI_OVERFLOW_SUBAGENTS_FIXTURE: '1' } },
 	stopped: { file: 'test/fixtures/TuiAppFixture.tsx', env: { FOLD_TUI_STOPPED_SUBAGENT_FIXTURE: '1' } },
+	/** As a real session opens: composer focused, so `l` types instead of moving. */
+	typing: {
+		file: 'test/fixtures/TuiAppFixture.tsx',
+		env: { FOLD_TUI_INPUT_FOCUSED_FIXTURE: '1', FOLD_TUI_OVERFLOW_SUBAGENTS_FIXTURE: '1' },
+	},
 	markdown: { file: 'test/fixtures/TuiMarkdownFixture.tsx', env: {} },
 	interrupted: { file: 'test/fixtures/TuiInterruptedFixture.tsx', env: {} },
 }
@@ -77,7 +82,12 @@ const sendKey = async (
 		await session.keyboard.type(key)
 		return
 	}
-	const pressed = lowered === 'escape' ? 'Escape' : lowered.charAt(0).toUpperCase() + lowered.slice(1)
+	// Arrows are `ArrowRight`, not `Right`: the bare name is rejected with
+	// "missing field `value`", which reads like a harness bug rather than a
+	// misspelled key.
+	const capitalised = lowered.charAt(0).toUpperCase() + lowered.slice(1)
+	const arrows = new Set(['up', 'down', 'left', 'right'])
+	const pressed = lowered === 'escape' ? 'Escape' : arrows.has(lowered) ? `Arrow${capitalised}` : capitalised
 	await session.keyboard.press(pressed)
 }
 

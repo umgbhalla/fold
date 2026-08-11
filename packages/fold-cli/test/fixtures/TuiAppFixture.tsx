@@ -20,6 +20,13 @@ const renderer = await createCliRenderer({
 	useKittyKeyboard: {},
 	onDestroy: () => resolveDestroyed?.(),
 })
+/**
+ * A real session opens with the composer focused and the fixtures did not, so a
+ * whole class of key handling was untestable here: `l` is a letter to a focused
+ * composer and a pane move otherwise, and that difference hid a navigation dead
+ * end that only showed up in the shipped binary.
+ * `FOLD_TUI_INPUT_FOCUSED_FIXTURE=1` reproduces how the app actually starts.
+ */
 const [status, setStatus] = createSignal<'RUNNING' | 'IDLE' | 'STOPPED'>('IDLE')
 const [notice, setNotice] = createSignal<string | null>(null)
 const [targetNotice, setTargetNotice] = createSignal<{ readonly agentId: string; readonly text: string } | null>(null)
@@ -285,6 +292,7 @@ await render(
 			onViewChange={(change) => setViewedPatchHashes((viewed) => markChangeViewed(viewed, change))}
 			onRefreshGit={() => setNotice('CHANGES REFRESHED')}
 			{...(process.env.FOLD_TUI_SUBAGENT_FIXTURE === '1' ? { initialSelectedAgentId: researcherAgentId } : {})}
+			{...(process.env.FOLD_TUI_INPUT_FOCUSED_FIXTURE === '1' ? { initialInputFocused: true } : {})}
 			notice={notice}
 			targetNotice={targetNotice}
 			onCompact={() => setNotice('COMPACTED')}
