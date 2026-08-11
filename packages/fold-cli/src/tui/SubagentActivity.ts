@@ -9,10 +9,6 @@ import type { SubagentStatus, SubagentView } from './Subagents'
  * that actually costs time in a live session, "is this one working or stuck",
  * and it answers it without leaving the rail. Every field is derived from the
  * agent's own `entries`, so nothing new has to be threaded through the log.
- *
- * `idleMs` is the gap since the agent's newest entry, not since it started: an
- * agent twelve minutes into a long `bash` run and an agent that silently died
- * twelve minutes ago look identical in an age column, and different here.
  */
 export type SubagentActivity = {
 	readonly status: SubagentStatus
@@ -20,10 +16,20 @@ export type SubagentActivity = {
 	readonly tools: number
 	/** Milliseconds since dispatch. */
 	readonly ageMs: number
-	/** Milliseconds since this agent's newest entry, or null when it has none. */
+	/**
+	 * Milliseconds of silence that are not explained by a tool still running.
+	 *
+	 * Null while a tool is in flight. A subagent produces no log entries for the
+	 * whole duration of a `bash` call, so a plain "time since the newest entry"
+	 * counts a healthy three-minute test run as three minutes of silence and
+	 * would flag every slow-but-fine agent as stuck. Silence only means something
+	 * once nothing is out running.
+	 */
 	readonly idleMs: number | null
 	/** The tool call still in flight, if the newest tool call has no result yet. */
 	readonly runningTool: { readonly name: string; readonly summary: string } | null
+	/** How long the in-flight tool has been running, if there is one. */
+	readonly runningToolMs: number | null
 	/** The newest tool result or assistant line, already flattened to one line. */
 	readonly lastOutput: string | null
 	/** For a finished agent, its result text; for a failed one, its reason. */
@@ -128,7 +134,7 @@ const lastToolOutput = (entries: ReadonlyArray<LogEntry>): string | null => {
 }
 
 /**
- * The newest tool call that never got a result.
+ * The newest tool call that never got a result, and when it was dispatched.
  *
  * Pairing by id rather than taking the newest call is what makes this useful:
  * an agent that has called `bash` ten times and had all ten return is not
@@ -137,11 +143,11 @@ const lastToolOutput = (entries: ReadonlyArray<LogEntry>): string | null => {
  */
 const runningToolOf = (
 	entries: ReadonlyArray<LogEntry>,
-): { readonly name: string; readonly summary: string } | null => {
+): { readonly name: string; readonly summary: string; readonly since: number } | null => {
 	const resolved = resolvedToolCallIds(entries)
 	for (const entry of entries.toReversed()) {
 		for (const call of toolCallsOf(entry).toReversed()) {
-			if (!resolved.has(call.id)) return { name: call.name, summary: call.summary }
+			if (!resolved.has(call.id)) return { name: call.name, summary: call.summary, since: entry.ts }
 		}
 	}
 	return null
@@ -165,8 +171,11 @@ export const subagentActivity = (agent: SubagentView, now: number): SubagentActi
 		turns: agent.turns,
 		tools: agent.tools,
 		ageMs: Math.max(0, now - agent.calledAt),
-		idleMs: newest === undefined ? null : Math.max(0, now - newest.ts),
-		runningTool: running,
+		// Silence during a tool call is the tool working, not the agent stalling,
+		// so it is not reported as idle at all.
+		idleMs: running !== null || newest === undefined ? null : Math.max(0, now - newest.ts),
+		runningTool: running === null ? null : { name: running.name, summary: running.summary },
+		runningToolMs: running === null ? null : Math.max(0, now - running.since),
 		lastOutput: lastToolOutput(agent.entries) ?? lastAssistantText(agent.entries),
 		outcomeText:
 			finish === undefined

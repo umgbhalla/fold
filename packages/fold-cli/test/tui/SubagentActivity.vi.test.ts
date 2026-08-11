@@ -131,10 +131,26 @@ describe('subagentActivity', () => {
 		expect(activity.runningTool).toBeNull()
 	})
 
-	it('measures idle time from the newest entry, not from dispatch', () => {
-		const activity = subagentActivity(view([toolCall(5, callId, 'bash', { command: 'x' })]), 12_000)
+	/**
+	 * A subagent emits no log entries for the whole duration of a tool call, so
+	 * measuring silence from the newest entry counts a healthy three-minute test
+	 * run as three minutes of being stuck. While a tool is out, the elapsed time
+	 * belongs to the tool and there is no idleness to report.
+	 */
+	it('reports no idle time while a tool is still running', () => {
+		const activity = subagentActivity(view([toolCall(5, callId, 'bash', { command: 'bun test' })]), 12_000)
+		expect(activity.idleMs).toBeNull()
+		expect(activity.runningToolMs).toBe(7_000)
 		expect(activity.ageMs).toBe(12_000)
+	})
+
+	it('measures idle time from the newest entry once every tool has returned', () => {
+		const activity = subagentActivity(
+			view([toolCall(3, callId, 'bash', { command: 'bun test' }), toolResult(5, callId, 'bash', 'ok')]),
+			12_000,
+		)
 		expect(activity.idleMs).toBe(7_000)
+		expect(activity.runningToolMs).toBeNull()
 	})
 
 	it('has no idle time when the agent has no entries', () => {

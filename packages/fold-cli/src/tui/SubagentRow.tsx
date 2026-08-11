@@ -67,11 +67,12 @@ const shortDuration = (ms: number): string => {
 }
 
 /**
- * An agent that has not produced an entry for this long is worth a second look.
+ * An agent that has been silent this long, with no tool out running to explain
+ * it, is worth a second look.
  *
- * The threshold is deliberately generous: a compile or a test run routinely goes
- * a minute without emitting anything, and crying wolf at thirty seconds would
- * train the reader to ignore the colour.
+ * The threshold is deliberately generous: a model can take a while to produce
+ * its next turn, and crying wolf at thirty seconds would train the reader to
+ * ignore the colour.
  */
 const IDLE_ALERT_MS = 90_000
 
@@ -94,28 +95,30 @@ export const collapsedRowCells = (agent: SubagentView, now: number): ReadonlyArr
 ]
 
 /**
- * The line under an expanded row: how much work it has done and how long it has
- * been quiet.
+ * The line under an expanded row: how much work it has done, and either how long
+ * its tool has been running or how long it has been quiet.
+ *
+ * A running tool is reported as its own elapsed time rather than as idleness,
+ * because a subagent emits nothing at all while a tool is out, and calling that
+ * idle would flag every slow-but-healthy agent.
  */
-export const expandedStatsLine = (activity: SubagentActivity, type: string, width: number): string =>
-	renderRow(
+export const expandedStatsLine = (activity: SubagentActivity, type: string, width: number): string => {
+	const timing =
+		activity.runningToolMs !== null
+			? `running ${shortDuration(activity.runningToolMs)}`
+			: activity.idleMs !== null && activity.status === 'running'
+				? `idle ${shortDuration(activity.idleMs)}`
+				: shortDuration(activity.ageMs)
+	return renderRow(
 		[
 			{ text: typeAbbreviation(type), weight: 'optional', priority: 0 },
 			{ text: `${activity.turns}t`, weight: 'optional', priority: 2 },
 			{ text: `${activity.tools}⚒`, weight: 'optional', priority: 3 },
-			{
-				text:
-					activity.status === 'running'
-						? activity.idleMs === null
-							? shortDuration(activity.ageMs)
-							: `idle ${shortDuration(activity.idleMs)}`
-						: shortDuration(activity.ageMs),
-				weight: 'subject',
-				minWidth: 3,
-			},
+			{ text: timing, weight: 'subject', minWidth: 3 },
 		],
 		width,
 	)
+}
 
 const SubagentDetailLine = (props: {
 	readonly glyph: string
