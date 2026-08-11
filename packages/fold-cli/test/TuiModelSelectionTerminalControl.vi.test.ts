@@ -26,18 +26,21 @@ terminalDescribe('TUI staged model selection', () => {
 			record: 'on-failure',
 		})
 		await session.screen.waitForText('MODEL SELECTION', { timeoutMs: 10_000 })
+		// Direct model is the first row and Profile the second (commit e351801), so
+		// reaching the profile branch means stepping down one.
+		await session.keyboard.press('ArrowDown')
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('fixture-profile', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('"profile":"fixture-profile"', { timeoutMs: 10_000 })
 		await session.screen.waitForText('Direct model', { timeoutMs: 10_000 })
-		await session.keyboard.press('ArrowDown')
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('fixture-provider', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('fixture-model', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
-		await session.screen.waitForText('Mode · new session only', { timeoutMs: 10_000 })
+		// The mode stage is headed simply 'Mode' now.
+		await session.screen.waitForText('Mode', { timeoutMs: 10_000 })
 		await session.keyboard.press('ArrowDown')
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('"mode":"rlm"', { timeoutMs: 10_000 })
@@ -64,14 +67,15 @@ terminalDescribe('TUI staged model selection', () => {
 		await session.screen.waitForText('Working directory', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('Selection type', { timeoutMs: 10_000 })
-		await session.keyboard.press('ArrowDown')
+		// Direct model is already the selected row, so no step is needed to reach it.
 		await session.screen.waitForText('▸ Direct model', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('Provider', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('Model · fixture-provider', { timeoutMs: 10_000 })
 		await session.keyboard.press('Enter')
-		await session.screen.waitForText('Mode · new session only', { timeoutMs: 10_000 })
+		// The mode stage is headed simply 'Mode' now.
+		await session.screen.waitForText('Mode', { timeoutMs: 10_000 })
 		await session.keyboard.press('ArrowDown')
 		await session.keyboard.press('Enter')
 		await session.screen.waitForText('"provider":"fixture-provider"', { timeoutMs: 10_000 })

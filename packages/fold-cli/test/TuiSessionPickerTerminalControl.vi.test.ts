@@ -33,9 +33,11 @@ terminalDescribe('TUI session picker', () => {
 		expect(initial.text).toContain('UPDATED')
 		expect(initial.text).toContain('＋ NEW SESSION · HERE')
 		expect(initial.text).toContain('GG/G FIRST/LAST')
-		expect(initial.text).toContain('F GLITCH:ON')
+		// Effects ship off (commit 7492421), so the footer starts at OFF and the
+		// keypress is what turns glitch on.
+		expect(initial.text).toContain('F GLITCH:OFF')
 		await session.keyboard.type('f')
-		await session.screen.waitForText('F GLITCH:OFF', { timeoutMs: 10_000 })
+		await session.screen.waitForText('F GLITCH:ON', { timeoutMs: 10_000 })
 
 		await session.keyboard.press('ArrowDown')
 		await session.keyboard.type('gg')
