@@ -15,7 +15,14 @@ export const createFxControls = (
 	toggles?: Accessor<FxToggles>,
 	setToggles?: (update: (current: FxToggles) => FxToggles) => void,
 ): FxControls => {
-	const [fallback, setFallback] = createSignal<FxToggles>({ ...ALL_FX_ON, vignette: 'light' })
+	const [fallback, setFallback] = createSignal<FxToggles>({
+		...ALL_FX_ON,
+		glow: false,
+		scanlines: false,
+		glitch: false,
+		rollingBar: false,
+		vignette: 'off',
+	})
 	return { toggles: () => toggles?.() ?? fallback(), setToggles: setToggles ?? setFallback }
 }
 

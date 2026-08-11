@@ -95,7 +95,10 @@ export const runTui = (
 		const [toggles, setToggles] = createSignal<FxToggles>({
 			...ALL_FX_ON,
 			glow: false,
-			vignette: 'light',
+			scanlines: false,
+			glitch: false,
+			rollingBar: false,
+			vignette: 'off',
 		})
 		const [gitSnapshot, setGitSnapshot] = createSignal<GitSnapshot>({ _tag: 'ready', files: [] })
 		const [viewedChanges, setViewedChanges] = createSignal<Readonly<Record<string, ViewedPatchHashes>>>({})
