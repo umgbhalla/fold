@@ -144,15 +144,15 @@ export const MetaRail = (props: { readonly meta: Meta }) => {
 					</text>
 					<box flexGrow={1} />
 					<text fg={theme.color.textFaint} wrapMode="none">
-						latest
+						{props.meta.contextPercent === null ? 'latest' : `${props.meta.contextPercent}% window`}
 					</text>
 				</box>
 				<box flexDirection="row" height={1} gap={1}>
 					<text fg={theme.color.textFaint} width={5} wrapMode="none">
 						COST
 					</text>
-					<text fg={theme.color.textFaint} wrapMode="none">
-						—
+					<text fg={props.meta.costUsd === null ? theme.color.textFaint : theme.color.text} wrapMode="none">
+						{props.meta.costUsd === null ? '—' : `$${props.meta.costUsd.toFixed(4)}`}
 					</text>
 					<box flexGrow={1} />
 					<text

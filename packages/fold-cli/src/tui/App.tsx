@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { ModelConfiguration } from '@humanlayer/fold-agent'
-import { AgentId } from '@humanlayer/fold-core'
+import { AgentId, defaultContextWindowFor } from '@humanlayer/fold-core'
+import type { ModelCatalogEntry } from '@humanlayer/fold-core'
 import { installPostFx, nextVignetteMode, type FxToggles } from '@humanlayer/fold-tui-theme/postfx'
 import { TextAttributes, type KeyEvent, type ScrollBoxRenderable, type TextareaRenderable } from '@opentui/core'
 import { registerManagedTextareaLayer } from '@opentui/keymap/addons/opentui'
@@ -52,6 +53,8 @@ export type TuiAppProps = {
 	readonly mode: string
 	readonly profile: string
 	readonly configuration?: ModelConfiguration
+	/** Pricing and limits for the live model, so the rail can show cost and window use. */
+	readonly catalog?: ReadonlyArray<ModelCatalogEntry>
 	readonly notice: Accessor<string | null>
 	readonly targetNotice?: Accessor<{ readonly agentId: string; readonly text: string } | null>
 	readonly compacting?: Accessor<boolean>
@@ -180,7 +183,20 @@ export const TuiApp = (props: TuiAppProps) => {
 	})
 	const agents = createMemo(() => subagentViews(props.state().allEntries, rootAgentId()))
 	const selectedAgent = createMemo(() => agents().find((agent) => agent.agentId === selectedAgentId()))
-	const meta = createMemo(() => metaCounts(props.state().allEntries, agents()))
+	const catalogEntry = createMemo(() => {
+		const modelId = props.state().model
+		const catalog = props.catalog
+		if (catalog === undefined || modelId === 'unresolved') return null
+		return catalog.find((entry) => entry.modelId === modelId) ?? null
+	})
+	const meta = createMemo(() =>
+		metaCounts(
+			props.state().allEntries,
+			agents(),
+			catalogEntry()?.pricing ?? null,
+			catalogEntry()?.contextWindow ?? defaultContextWindowFor(props.state().model),
+		),
+	)
 	const skillTargetAgent = createMemo(() => selectedAgent())
 	const skills = createMemo(() => skillViews(props.state().allEntries, skillTargetAgent()?.agentId ?? rootAgentId()))
 	const nextRailTab = (): void => {

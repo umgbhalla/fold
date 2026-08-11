@@ -365,17 +365,21 @@ export const EventIndexRow = (props: {
 					<span style={{ fg: visual().color }}>{` ${visual().glyph} ${gutterLabel()} `}</span>
 				</text>
 			</box>
-			<text
-				fg={props.selected() || isUser() ? tactical.color.text : tactical.color.textDim}
-				attributes={isUser() ? TextAttributes.BOLD : TextAttributes.NONE}
-				flexGrow={1}
-				flexShrink={1}
-				wrapMode="none"
-			>
-				{summary()}
-			</text>
-			<text fg={visual().color} width={6} flexShrink={0} paddingLeft={1} wrapMode="none">
-				{status()}
+			{/* The summary is clipped, not shrunk: a long one used to run into the
+			    status column ("Run echo hi commandone"). */}
+			<box flexGrow={1} flexShrink={1} overflow="hidden" marginRight={1}>
+				<text
+					fg={props.selected() || isUser() ? tactical.color.text : tactical.color.textDim}
+					attributes={isUser() ? TextAttributes.BOLD : TextAttributes.NONE}
+					wrapMode="none"
+				>
+					{summary()}
+				</text>
+			</box>
+			{/* The space lives in the string: padding on a <text> does not reserve a
+			    column, so the clipped summary sat flush against the status. */}
+			<text fg={visual().color} width={6} flexShrink={0} wrapMode="none">
+				{status() === '' ? '' : ` ${status()}`}
 			</text>
 		</box>
 	)

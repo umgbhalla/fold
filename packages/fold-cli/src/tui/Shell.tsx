@@ -498,6 +498,7 @@ export const runTui = (
 											mode={`${current().mode()}${options.rpi === true ? '+rpi' : ''}`}
 											profile={current().profile()}
 											configuration={configuration()}
+											catalog={options.catalog ?? []}
 											onOpenProviders={router.showProviders}
 											notice={current().notice}
 											targetNotice={current().targetNotice}

@@ -1,4 +1,7 @@
-import type { AgentId, AgentStartedLogEntry, LogEntry } from '@humanlayer/fold-core'
+import { usageInputTotal, usageOutputTotal } from '@humanlayer/fold-core'
+import type { AgentId, AgentStartedLogEntry, LogEntry, ModelPricing } from '@humanlayer/fold-core'
+
+import { responseCostUsd } from '../Renderer'
 
 export type SubagentStatus = 'running' | 'done' | 'error' | 'stopped' | 'interrupted'
 
@@ -92,7 +95,21 @@ export const relativeSubagentTime = (calledAt: number, now = Date.now()): string
 	return `${Math.floor(months / 12)}y`
 }
 
-export const metaCounts = (entries: ReadonlyArray<LogEntry>, agents: ReadonlyArray<SubagentView>) => {
+/**
+ * The rail's live readouts.
+ *
+ * `contextTokens` reads the newest response that actually reported usage, not
+ * simply the newest assistant message: a streaming or interrupted message has
+ * no `finish`, and taking it made the whole readout fall back to zero. `costUsd`
+ * is the session total, summed over every response with usage, and is null only
+ * when the model publishes no pricing.
+ */
+export const metaCounts = (
+	entries: ReadonlyArray<LogEntry>,
+	agents: ReadonlyArray<SubagentView>,
+	pricing: ModelPricing | null = null,
+	contextWindow: number | null = null,
+) => {
 	const toolCalls = new Map<string, number>()
 	for (const entry of entries) {
 		if (entry._tag !== 'assistant-message' || typeof entry.message.content === 'string') continue
@@ -103,7 +120,18 @@ export const metaCounts = (entries: ReadonlyArray<LogEntry>, agents: ReadonlyArr
 	const agentTypes = new Map<string, number>()
 	for (const agent of agents) agentTypes.set(agent.type, (agentTypes.get(agent.type) ?? 0) + 1)
 	const assistantEntries = entries.filter((entry) => entry._tag === 'assistant-message')
-	const contextTokens = assistantEntries.at(-1)?.finish?.usage.inputTokens?.total ?? 0
+	const settled = assistantEntries.flatMap((entry) => (entry.finish === null ? [] : [entry.finish]))
+	const latestUsage = settled.at(-1)?.usage ?? null
+	const contextTokens = latestUsage === null ? 0 : usageInputTotal(latestUsage) + usageOutputTotal(latestUsage)
+	const costUsd =
+		pricing === null
+			? null
+			: settled.reduce((total, finish) => total + (responseCostUsd(finish.usage, pricing) ?? 0), 0)
+	const contextPercent =
+		contextWindow === null || contextWindow <= 0 || contextTokens === 0
+			? null
+			: Math.min(100, Math.round((contextTokens / contextWindow) * 100))
+	const outputTokens = settled.reduce((total, finish) => total + usageOutputTotal(finish.usage), 0)
 	const sparkRamp = '▁▂▃▄▅▆▇'
 	const activity = entries
 		.slice(-12)
@@ -112,6 +140,9 @@ export const metaCounts = (entries: ReadonlyArray<LogEntry>, agents: ReadonlyArr
 		turns: assistantEntries.length,
 		agents: agents.length,
 		contextTokens,
+		contextPercent,
+		outputTokens,
+		costUsd,
 		sparkline: activity.map((value) => sparkRamp[value] ?? '▁').join('') || '▁',
 		tools: [...toolCalls.values()].reduce((sum, count) => sum + count, 0),
 		toolCalls: [...toolCalls.entries()].sort((left, right) => right[1] - left[1]),
