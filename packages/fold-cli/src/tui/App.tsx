@@ -9,11 +9,13 @@ import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
 import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid'
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show, type Accessor } from 'solid-js'
 
+import { agentTypeAccent } from './AccentPalette'
 import { ActivityIndicator, type ActivityState } from './ActivityIndicator'
 import { CommandPalette, type TuiCommand } from './CommandPalette'
 import { nextRootInputVerb, normalizeRootInputVerb, rootInputVerbLabel, type RootInputVerb } from './Converse'
 import { EventDetail, EventIndexRow, EventRow, rowVisual } from './EventViews'
 import type { GitChange, GitChangeGroup, GitSnapshot } from './GitChanges'
+import { metaBarRows, metaDensity } from './MetaDensity'
 import { ModelSelectionModal, type ModelSelectionRequest } from './ModelSelectionModal'
 import {
 	contextMode,
@@ -348,6 +350,13 @@ export const TuiApp = (props: TuiAppProps) => {
 	// The tally box is indented one column, so it renders into one less than the pane's inner width.
 	const toolTally = createMemo(() => toolTallyLine(meta().toolCalls, toolGlyph, Math.max(0, railInner() - 1)))
 	const agentTypes = createMemo(() => agentTypeLine(meta().agentTypes, Math.max(0, railInner() - 1)))
+	/**
+	 * The expanded form of the two tallies, shown only when the rail is focused.
+	 * Capped at a handful of rows each so the lists never push the subagent list
+	 * they are describing off the screen.
+	 */
+	const agentTypeBars = createMemo(() => metaBarRows(meta().agentTypes, Math.max(0, railInner() - 3), 5))
+	const toolBars = createMemo(() => metaBarRows(meta().toolCalls, Math.max(0, railInner() - 5), 6))
 	const contextPaneWidth = createMemo(() => panes().context)
 	/**
 	 * The panes actually on screen, left to right, so `h`/`l` cannot walk into the
@@ -1411,24 +1420,67 @@ export const TuiApp = (props: TuiAppProps) => {
 								</Index>
 							</scrollbox>
 						</Show>
-						{/* What the session's tools actually were, in one line: the panel
-						    of bars this replaces spent a third of the rail's height to say
-						    the same thing. */}
-						{/* The fleet by type, which is the one META readout that had no
-						    home when that tab was retired. Only while the subagent list is
-						    showing: it says nothing about skills. */}
-						<Show when={railTab() === 'subagents' && agentTypes() !== ''}>
-							<box height={1} flexShrink={0} paddingLeft={1}>
-								<text fg={tactical.color.textDim} wrapMode="none">
-									{agentTypes()}
-								</text>
-							</box>
-						</Show>
-						<Show when={toolTally() !== ''}>
-							<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
-								<text fg={tactical.color.textDim} wrapMode="none">
-									{toolTally()}
-								</text>
+						{/* The session's shape: the fleet by type and the tool tally.
+						    These were a whole tab once, which cost a third of a
+						    permanently-visible pane. Now they are two lines while the rail
+						    is a sidebar and expand into labelled bars when it is focused,
+						    which is the row behaviour applied to a pane. */}
+						<Show
+							when={
+								metaDensity(railInner(), dimensions().height, focusedPane() === 'rail') === 'expanded'
+							}
+							fallback={
+								<>
+									<Show when={railTab() === 'subagents' && agentTypes() !== ''}>
+										<box height={1} flexShrink={0} paddingLeft={1}>
+											<text fg={tactical.color.textDim} wrapMode="none">
+												{agentTypes()}
+											</text>
+										</box>
+									</Show>
+									<Show when={toolTally() !== ''}>
+										<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
+											<text fg={tactical.color.textDim} wrapMode="none">
+												{toolTally()}
+											</text>
+										</box>
+									</Show>
+								</>
+							}
+						>
+							<box flexDirection="column" flexShrink={0} paddingLeft={1} marginBottom={1}>
+								<Show when={railTab() === 'subagents' && agentTypeBars().length > 0}>
+									<text fg={tactical.color.textFaint} wrapMode="none">
+										{`AGENT TYPES · ${meta().agents}`}
+									</text>
+									<Index each={agentTypeBars()}>
+										{(row) => (
+											<text wrapMode="none">
+												<span style={{ fg: tactical.color.textDim }}>{`${row().label} `}</span>
+												<span style={{ fg: agentTypeAccent(row().label.trim()) }}>
+													{row().bar}
+												</span>
+												<span style={{ fg: tactical.color.text }}>{` ${row().count}`}</span>
+											</text>
+										)}
+									</Index>
+								</Show>
+								<Show when={toolBars().length > 0}>
+									<text fg={tactical.color.textFaint} wrapMode="none">
+										{`TOOL CALLS · ${meta().tools}`}
+									</text>
+									<Index each={toolBars()}>
+										{(row) => (
+											<text wrapMode="none">
+												<span style={{ fg: tactical.color.textDim }}>
+													{`${toolGlyph(row().label.trim())} ${row().label} `}
+												</span>
+												<span style={{ fg: tactical.color.core }}>{row().bar}</span>
+												<span style={{ fg: tactical.color.text }}>{` ${row().count}`}</span>
+											</text>
+										)}
+									</Index>
+								</Show>
 							</box>
 						</Show>
 					</box>
