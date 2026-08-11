@@ -169,6 +169,100 @@ it.effect('jsonl layer recovers a sequence that goes backwards', () =>
 )
 
 /**
+ * Recovery must leave the whole log strictly increasing, including when a
+ * renumbered entry would otherwise collide with a real sequence further down.
+ * Two seams and a collision in one file.
+ */
+it.effect('jsonl layer recovery leaves every sequence strictly increasing', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'seams.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				for (const value of [1, 2, 3, 4]) yield* log.append(makeToolState(value))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			// seq becomes 0, 5, 1, 2, 6: one seam whose repair (6) would collide
+			// with the real 6 on the last line.
+			const lines = (yield* fs.readFileString(filePath)).split('\n').filter((l) => l.length > 0)
+			const rewritten = lines
+				.map((line, index) => ({ ...JSON.parse(line), seq: [0, 5, 1, 2, 6][index] ?? index }))
+				.map((entry) => JSON.stringify(entry))
+			yield* fs.writeFileString(filePath, `${rewritten.join('\n')}\n`)
+
+			const entries = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* Stream.runCollect(log.entries())
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			const seqs = Array.from(entries).map((entry) => entry.seq)
+			expect(seqs.length).toBe(5)
+			expect(new Set(seqs).size, `duplicate seq in ${seqs.join(',')}`).toBe(seqs.length)
+			for (const [index, seq] of seqs.entries()) {
+				if (index > 0) expect(seq, `at ${index} in ${seqs.join(',')}`).toBeGreaterThan(seqs[index - 1] ?? -1)
+			}
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
+
+/**
+ * Reopening a seamed log repeatedly must stay stable: each cycle reads, appends,
+ * and never reuses a sequence already on disk. A one-shot check would not catch
+ * a repair that drifts.
+ */
+it.effect('jsonl layer stays stable across repeated reopens of a seamed log', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'reopened.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				for (const value of [1, 2]) yield* log.append(makeToolState(value))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			// Force a backwards seam: 0, 1, 0.
+			const lines = (yield* fs.readFileString(filePath)).split('\n').filter((l) => l.length > 0)
+			const seamed = lines
+				.map((line, index) => JSON.stringify({ ...JSON.parse(line), seq: [0, 1, 0][index] ?? index }))
+				.join('\n')
+			yield* fs.writeFileString(filePath, `${seamed}\n`)
+
+			for (let cycle = 0; cycle < 3; cycle += 1) {
+				yield* Effect.gen(function* () {
+					const log = yield* EventLog
+					yield* log.append(makeToolState(cycle))
+				}).pipe(Effect.provide(layerJsonl(filePath)))
+			}
+
+			const onDisk = (yield* fs.readFileString(filePath))
+				.split('\n')
+				.filter((line) => line.length > 0)
+				.map((line): number => JSON.parse(line).seq)
+			// The appended tail never repeats a sequence already written.
+			const tail = onDisk.slice(3)
+			expect(new Set(tail).size, `repeat in appended tail ${tail.join(',')}`).toBe(tail.length)
+			for (const seq of tail) expect(onDisk.slice(0, 3)).not.toContain(seq)
+
+			const entries = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* Stream.runCollect(log.entries())
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+			const seqs = Array.from(entries).map((entry) => entry.seq)
+			for (const [index, seq] of seqs.entries()) {
+				if (index > 0) expect(seq, `at ${index} in ${seqs.join(',')}`).toBeGreaterThan(seqs[index - 1] ?? -1)
+			}
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
+
+/**
  * The writer half. Appending after reopening a gapped log must not reuse a
  * sequence already on disk, which is what `current.length` did.
  */
