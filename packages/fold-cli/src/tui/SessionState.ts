@@ -100,16 +100,31 @@ const replayAfter = (replay: ReplayState, seenSeqs: ReadonlyArray<number>): Repl
 		Match.exhaustive,
 	)
 
+/**
+ * Insert one entry into a seq-ordered list.
+ *
+ * The log arrives in seq order almost always, so the fast path is a plain
+ * append. Re-sorting the whole list per entry made a replay O(n^2 log n) - a
+ * 2000-entry transcript cost ~36 ms to rebuild, which a focused subagent view
+ * paid on every 16 ms event batch. A tail scan keeps the same total order at
+ * O(1) amortised.
+ */
+const insertBySeq = (entries: ReadonlyArray<LogEntry>, entry: LogEntry): ReadonlyArray<LogEntry> => {
+	const last = entries[entries.length - 1]
+	if (last === undefined || last.seq <= entry.seq) return [...entries, entry]
+	let index = entries.length
+	while (index > 0 && (entries[index - 1]?.seq ?? 0) > entry.seq) index -= 1
+	return [...entries.slice(0, index), entry, ...entries.slice(index)]
+}
+
 const reduceLog = (state: SessionState, entry: LogEntry, rootAgentId: AgentId): SessionState => {
 	if (state.seenSeqs.includes(entry.seq)) return state
 
 	const durableHead = Math.max(state.durableHead ?? entry.seq, entry.seq)
 	const seenSeqs = [...state.seenSeqs, entry.seq]
-	const allEntries = [...state.allEntries, entry].sort((left, right) => left.seq - right.seq)
+	const allEntries = insertBySeq(state.allEntries, entry)
 	const rootEntry = entry.agentId === rootAgentId && isRootContent(entry)
-	const rootContent = rootEntry
-		? [...state.rootContent, entry].sort((left, right) => left.seq - right.seq)
-		: state.rootContent
+	const rootContent = rootEntry ? insertBySeq(state.rootContent, entry) : state.rootContent
 
 	const projection =
 		entry.agentId === rootAgentId

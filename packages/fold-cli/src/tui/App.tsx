@@ -1,6 +1,6 @@
+/** @jsxImportSource @opentui/solid */
 import type { ModelConfiguration } from '@humanlayer/fold-agent'
 import { AgentId } from '@humanlayer/fold-core'
-/** @jsxImportSource @opentui/solid */
 import { installPostFx, nextVignetteMode, type FxToggles } from '@humanlayer/fold-tui-theme/postfx'
 import type { ThemeId } from '@humanlayer/fold-tui-theme/themes'
 import { TextAttributes, type KeyEvent, type ScrollBoxRenderable, type TextareaRenderable } from '@opentui/core'
@@ -28,9 +28,15 @@ import {
 } from './Navigation'
 import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
-import { conversationRows, makeSessionStateFromEntries, replayIsReady, type SessionState } from './SessionState'
+import {
+	conversationRows,
+	makeSessionStateFromEntries,
+	replayIsReady,
+	type ConversationRow,
+	type SessionState,
+} from './SessionState'
 import { SkillsRail } from './SkillsRail'
-import { metaCounts, relativeSubagentTime, skillViews, subagentViews } from './Subagents'
+import { metaCounts, relativeSubagentTime, skillViews, subagentViews, type SubagentView } from './Subagents'
 import { theme as tactical } from './ThemeState'
 import { TUI_CONTEXT_TITLE, TUI_INSPECT_BADGE, TUI_LIVE_BADGE, tuiScrollbarOptions } from './TuiChrome'
 import { createFxControls, FxFooter, fxCommands, KeyHint, themeCommands } from './TuiControls'
@@ -193,9 +199,28 @@ export const TuiApp = (props: TuiAppProps) => {
 	const targetVerbLabel = createMemo(() =>
 		focusedAgent()?.status === 'running' ? rootInputVerbLabel(targetVerb()) : 'RESUME',
 	)
+	/**
+	 * A focused subagent's rows are rebuilt from its own entries, which is the
+	 * most expensive projection in the TUI. The cache keys on the agent and its
+	 * entry count so a 16 ms delta batch that changed nothing in that agent
+	 * reuses the previous rows instead of replaying its whole log.
+	 */
+	let agentRowsCache: {
+		readonly agentId: string
+		readonly count: number
+		readonly rows: ReadonlyArray<ConversationRow>
+	} | null = null
+	const agentRows = (agent: SubagentView): ReadonlyArray<ConversationRow> => {
+		const cached = agentRowsCache
+		if (cached !== null && cached.agentId === agent.agentId && cached.count === agent.entries.length)
+			return cached.rows
+		const next = conversationRows(makeSessionStateFromEntries(agent.entries, agent.agentId))
+		agentRowsCache = { agentId: agent.agentId, count: agent.entries.length, rows: next }
+		return next
+	}
 	const visibleContextRows = createMemo(() => {
 		const agent = focusedAgent()
-		if (agent !== undefined) return conversationRows(makeSessionStateFromEntries(agent.entries, agent.agentId))
+		if (agent !== undefined) return agentRows(agent)
 		const selected = selectedRow()
 		return mode() === 'inspect' && selected !== undefined ? [selected] : rows()
 	})
