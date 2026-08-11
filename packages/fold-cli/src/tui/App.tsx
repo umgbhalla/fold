@@ -88,6 +88,14 @@ const changeGroups: ReadonlyArray<{ readonly id: GitChangeGroup; readonly label:
 
 const diffHeight = (diff: string): number => Math.max(4, diff.split('\n').length + 1)
 
+/**
+ * Stand-in root agent for a log that has not produced its first entry yet.
+ * `AgentId.make` throws on a malformed id, so this has to be a well-formed one:
+ * a short label like `agent_root` fails the cuid check and takes the whole TUI
+ * down on the first render of an empty session.
+ */
+const placeholderRootAgentId = AgentId.make('agent_r00tr00tr00tr00tr00tr00t')
+
 export const TuiApp = (props: TuiAppProps) => {
 	const renderer = useRenderer()
 	const dimensions = useTerminalDimensions()
@@ -178,7 +186,7 @@ export const TuiApp = (props: TuiAppProps) => {
 		return (
 			props.state().allEntries.find((entry) => entry._tag === 'session_started')?.rootAgentId ??
 			props.state().allEntries[0]?.agentId ??
-			AgentId.make('agent_root')
+			placeholderRootAgentId
 		)
 	})
 	const agents = createMemo(() => subagentViews(props.state().allEntries, rootAgentId()))

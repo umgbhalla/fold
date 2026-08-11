@@ -33,15 +33,25 @@ const fixtureModel = {
 	requestedReasoningLevel: 'off',
 	thinking: { _tag: 'disabled' },
 } as const
-const rootAgentId = AgentId.make('agent_aaaaaaaaaaaaaaaaaaaaaaaa')
-const researcherAgentId = AgentId.make('agent_bbbbbbbbbbbbbbbbbbbbbbbb')
-const subagentToolCallId = ToolCallId.make('tool_call_aaaaaaaaaaaaaaaaaaaaaaaa')
+/**
+ * Branded ids reject anything that is not `<prefix>_<21-32 lowercase alnum>`, and
+ * `make` throws rather than returning an error, so a readable fixture label has
+ * to be padded up to a legal cuid or the whole fixture dies before first paint.
+ */
+const fixtureCuid = (label: string): string => label.replaceAll(/[^a-z0-9]/g, '0').padEnd(24, '0').slice(0, 24)
+const fixtureMessageId = (label: string) => MessageId.make(`msg_${fixtureCuid(label)}`)
+const fixtureAgentId = (label: string) => AgentId.make(`agent_${fixtureCuid(label)}`)
+const fixtureToolCallId = (label: string) => ToolCallId.make(`tool_call_${fixtureCuid(label)}`)
+
+const rootAgentId = fixtureAgentId('root')
+const researcherAgentId = fixtureAgentId('researcher')
+const subagentToolCallId = fixtureToolCallId('subagent')
 const overflowSubagentEntries: ReadonlyArray<LogEntry> =
 	process.env.FOLD_TUI_OVERFLOW_SUBAGENTS_FIXTURE === '1'
 		? Array.from({ length: 14 }, (_, index) => {
 				const number = index + 1
-				const toolCallId = ToolCallId.make(`tool_call_overflow_${number}`)
-				const agentId = AgentId.make(`agent_overflow_${number}`)
+				const toolCallId = fixtureToolCallId(`overflow${number}`)
+				const agentId = fixtureAgentId(`overflow${number}`)
 				return [
 					{
 						_tag: 'assistant-message',
@@ -50,7 +60,7 @@ const overflowSubagentEntries: ReadonlyArray<LogEntry> =
 						agentId: rootAgentId,
 						parentAgentId: null,
 						toolCallId: null,
-						messageId: MessageId.make(`msg_overflow_${number}`),
+						messageId: fixtureMessageId(`overflow${number}`),
 						message: {
 							role: 'assistant',
 							content: [
@@ -108,7 +118,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 		agentId: rootAgentId,
 		parentAgentId: null,
 		toolCallId: null,
-		messageId: MessageId.make('msg_system_root_aaaaaaaaaaaaaaaa'),
+		messageId: fixtureMessageId('systemroot'),
 		placement: 'leading',
 		messages: [
 			{
@@ -127,7 +137,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 					agentId: rootAgentId,
 					parentAgentId: null,
 					toolCallId: null,
-					messageId: MessageId.make('msg_root_subagent_aaaaaaaaaaaa'),
+					messageId: fixtureMessageId('rootsubagent'),
 					message: {
 						role: 'assistant',
 						content: [
@@ -151,7 +161,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 		agentId: researcherAgentId,
 		parentAgentId: null,
 		toolCallId: null,
-		messageId: MessageId.make('msg_system_researcher_aaaaaaaaaa'),
+		messageId: fixtureMessageId('systemresearcher'),
 		placement: 'leading',
 		messages: [
 			{
@@ -168,7 +178,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 		agentId: researcherAgentId,
 		parentAgentId: null,
 		toolCallId: null,
-		messageId: MessageId.make('msg_researcher_skill_aaaaaaaaaa'),
+		messageId: fixtureMessageId('researcherskill'),
 		message: {
 			role: 'assistant',
 			content: [
@@ -262,7 +272,9 @@ await render(
 			viewedPatchHashes={viewedPatchHashes}
 			onViewChange={(change) => setViewedPatchHashes((viewed) => markChangeViewed(viewed, change))}
 			onRefreshGit={() => setNotice('CHANGES REFRESHED')}
-			{...(process.env.FOLD_TUI_SUBAGENT_FIXTURE === '1' ? { initialSelectedAgentId: 'agent_researcher' } : {})}
+			{...(process.env.FOLD_TUI_SUBAGENT_FIXTURE === '1'
+				? { initialSelectedAgentId: researcherAgentId }
+				: {})}
 			notice={notice}
 			targetNotice={targetNotice}
 			onCompact={() => setNotice('COMPACTED')}
