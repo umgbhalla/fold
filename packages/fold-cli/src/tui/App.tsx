@@ -7,7 +7,7 @@ import { TextAttributes, type KeyEvent, type ScrollBoxRenderable, type TextareaR
 import { registerManagedTextareaLayer } from '@opentui/keymap/addons/opentui'
 import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
 import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid'
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, type Accessor } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show, type Accessor } from 'solid-js'
 
 import { agentTypeAccent } from './AccentPalette'
 import { ActivityIndicator, type ActivityState } from './ActivityIndicator'
@@ -31,6 +31,7 @@ import type { NewSessionRequest } from './NewSessionModal'
 import {
 	conversationRows,
 	durableConversationRows,
+	durableRowsSignature,
 	makeSessionStateFromEntries,
 	replayIsReady,
 	transientConversationRows,
@@ -149,7 +150,12 @@ export const TuiApp = (props: TuiAppProps) => {
 	 * Split so a token delta only rebuilds the streaming tail. The durable half
 	 * recomputes when the log grows, not on every 16 ms batch.
 	 */
-	const durableRows = createMemo(() => durableConversationRows(props.state()))
+	const durableRows = createMemo(
+		on(
+			() => durableRowsSignature(props.state()),
+			() => durableConversationRows(props.state()),
+		),
+	)
 	const transientRows = createMemo(() => transientConversationRows(props.state()))
 	const rows = createMemo(() => [...durableRows(), ...transientRows()])
 	const gitSnapshot = createMemo<GitSnapshot>(() => props.gitSnapshot?.() ?? { _tag: 'ready', files: [] })
@@ -220,6 +226,8 @@ export const TuiApp = (props: TuiAppProps) => {
 	} | null = null
 	const agentRows = (agent: SubagentView): ReadonlyArray<ConversationRow> => {
 		const cached = agentRowsCache
+		// The store is written with `reconcile`, which patches arrays in place, so
+		// the entry count - not array identity - is what says the log moved.
 		if (cached !== null && cached.agentId === agent.agentId && cached.count === agent.entries.length)
 			return cached.rows
 		const next = conversationRows(makeSessionStateFromEntries(agent.entries, agent.agentId))

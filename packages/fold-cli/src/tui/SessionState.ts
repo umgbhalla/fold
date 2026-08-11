@@ -522,51 +522,22 @@ const collapseToolResults = (rows: ReadonlyArray<ConversationRow>): ReadonlyArra
 }
 
 /**
- * Rows for one durable entry, remembered against the entry itself.
+ * A cheap fingerprint of the settled transcript.
  *
- * A durable entry never changes, so its rows never change either - except when
- * the entry becomes an interrupted assistant message, which the cached flag
- * detects. Streaming used to rebuild every row of the transcript on every 16 ms
- * delta batch; with this cache a batch only builds what actually arrived.
+ * The TUI holds the state in a solid store written with `reconcile`, which
+ * patches the existing arrays in place: object identity is NOT a safe cache
+ * key there. Length, the last durable seq and the interrupted count change
+ * whenever the projection can change, and nothing else does.
  */
-const entryRowsCache = new WeakMap<
-	LogEntry,
-	{ readonly interrupted: boolean; readonly rows: ReadonlyArray<ConversationRow> }
->()
-
-const cachedRowsForEntry = (
-	entry: LogEntry,
-	interruptedAssistantSeqs: ReadonlyArray<number>,
-): ReadonlyArray<ConversationRow> => {
-	const interrupted = interruptedAssistantSeqs.includes(entry.seq)
-	const cached = entryRowsCache.get(entry)
-	if (cached !== undefined && cached.interrupted === interrupted) return cached.rows
-	const rows = rowsForEntry(entry, interruptedAssistantSeqs)
-	entryRowsCache.set(entry, { interrupted, rows })
-	return rows
-}
+export const durableRowsSignature = (state: SessionState): string =>
+	`${state.rootContent.length}|${state.rootContent[state.rootContent.length - 1]?.seq ?? -1}|${state.interruptedAssistantSeqs.length}`
 
 /**
- * The settled part of the transcript, remembered against the rootContent array.
- *
- * The reducer replaces that array only when a durable entry lands, so a token
- * delta reuses the whole projection - collapseToolResults included - instead of
- * walking the transcript again.
+ * The settled part of the transcript. Pure: the caller memoises it against
+ * {@link durableRowsSignature} so a token delta never rebuilds it.
  */
-const durableRowsCache = new WeakMap<
-	object,
-	{ readonly interrupted: ReadonlyArray<number>; readonly rows: ReadonlyArray<ConversationRow> }
->()
-
-export const durableConversationRows = (state: SessionState): ReadonlyArray<ConversationRow> => {
-	const cached = durableRowsCache.get(state.rootContent)
-	if (cached !== undefined && cached.interrupted === state.interruptedAssistantSeqs) return cached.rows
-	const rows = collapseToolResults(
-		state.rootContent.flatMap((entry) => cachedRowsForEntry(entry, state.interruptedAssistantSeqs)),
-	)
-	durableRowsCache.set(state.rootContent, { interrupted: state.interruptedAssistantSeqs, rows })
-	return rows
-}
+export const durableConversationRows = (state: SessionState): ReadonlyArray<ConversationRow> =>
+	collapseToolResults(state.rootContent.flatMap((entry) => rowsForEntry(entry, state.interruptedAssistantSeqs)))
 
 /** The streaming tail. This is the only part a token delta can change. */
 export const transientConversationRows = (state: SessionState): ReadonlyArray<ConversationRow> =>
