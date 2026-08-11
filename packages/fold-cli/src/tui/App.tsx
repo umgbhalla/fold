@@ -768,17 +768,14 @@ export const TuiApp = (props: TuiAppProps) => {
 				setVerb((current) => nextRootInputVerb(props.state().status, current))
 				return
 			}
-			// Arrows fall through to the pane switcher below rather than being
-			// swallowed here. A real session starts with the composer focused, so
-			// `h`/`l` belong to the message being typed and cannot also mean "next
-			// pane"; the arrows are how you cross panes without leaving the
-			// composer, and the footer's `H/L PANE` is shorthand for both.
-			if (key.name === 'left' || key.name === 'right') {
-				key.preventDefault()
-				blurComposers()
-				setNavigation((current) => movePane(current, key.name === 'right' ? 1 : -1, availablePanes()))
-				return
-			}
+			// Nothing else: a focused composer owns the keyboard.
+			//
+			// This block briefly moved panes on left/right, which was dead code. The
+			// focused editor consumes the arrows for cursor movement and they never
+			// arrive here; logging every key that reaches this handler shows only
+			// `escape` and printable characters while the composer has focus. Escape
+			// is the way out, and it drops to pane level in the same session rather
+			// than leaving it.
 			return
 		}
 		if (key.name === 'j' || key.name === 'down' || key.name === 'k' || key.name === 'up') {

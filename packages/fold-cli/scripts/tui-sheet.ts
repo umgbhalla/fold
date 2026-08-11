@@ -55,7 +55,14 @@ const widths = flag('widths', '100,120,160')
 	.map((value) => Number.parseInt(value.trim(), 10))
 	.filter((value) => Number.isFinite(value) && value > 0)
 const rows = Number.parseInt(flag('rows', '44'), 10)
-const settleMs = Number.parseInt(flag('settle', '600'), 10)
+/**
+ * 600 ms was not enough for a fixture that starts with the composer focused:
+ * keys sent before the app mounts its keyboard handler are swallowed, and the
+ * run then reports whatever the unpressed screen looks like. That produced two
+ * false conclusions in a row (an "escape does not work" and a "dead branch is
+ * live") before the race was spotted, so the default is now generous.
+ */
+const settleMs = Number.parseInt(flag('settle', '1200'), 10)
 const fixtureName = flag('fixture', 'event')
 const keys = flag('keys', '')
 	.split(',')
