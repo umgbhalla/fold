@@ -50,10 +50,23 @@ const invalidEntryError = (message: string, cause: unknown) =>
 		cause,
 	})
 
+/**
+ * The complete lines of a JSONL file.
+ *
+ * A file that does not end in a newline was interrupted mid-append: a crash, a
+ * full disk, or a kill between the write and the flush. That last line is a
+ * fragment carrying no recoverable entry, and failing the load over it costs
+ * the user every complete entry before it, which is the same trade the
+ * backwards-sequence recovery below refuses to make.
+ *
+ * Only the final line is treated this way. A torn line anywhere else is not
+ * explained by an interrupted append, so it still fails the load rather than
+ * being skipped, because skipping it would hide real corruption.
+ */
 const jsonlLines = (contents: string): ReadonlyArray<string> => {
 	if (contents.length === 0) return []
 	if (contents.endsWith('\n')) return contents.slice(0, -1).split('\n')
-	return contents.split('\n')
+	return contents.split('\n').slice(0, -1)
 }
 
 /**

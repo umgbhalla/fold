@@ -363,3 +363,72 @@ it.effect('jsonl subscribe replays and follows live appends', () =>
 		}),
 	).pipe(Effect.provide(NodeFileSystem.layer)),
 )
+
+/**
+ * A crash or a full disk mid-append leaves a partial final line.
+ *
+ * Every complete entry before it is intact, so refusing to open the file costs
+ * the user the whole conversation to punish a half-written tail that carries no
+ * information. The truncated line is dropped and the rest is returned, which is
+ * the same trade the backwards-sequence recovery above makes.
+ *
+ * Only the LAST line may be dropped this way: a torn line anywhere else means
+ * the file is damaged in a way that is not explained by an interrupted append,
+ * and quietly skipping it would hide real corruption.
+ */
+it.effect('jsonl layer drops a truncated final line and keeps the rest', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'truncated.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				yield* log.append(makeToolState(1))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			// Cut the final line in half, exactly as an interrupted write would.
+			const lines = (yield* fs.readFileString(filePath)).split('\n').filter((line) => line.length > 0)
+			const last = lines.at(-1) ?? ''
+			yield* fs.writeFileString(filePath, `${lines.slice(0, -1).join('\n')}\n${last.slice(0, last.length / 2)}`)
+
+			const entries = yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				return yield* Stream.runCollect(log.entries())
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			expect(Array.from(entries).map((entry) => entry.seq)).toEqual([0])
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
+
+/** A torn line that is not the last one is real corruption, and still fails. */
+it.effect('jsonl layer still rejects a torn line that is not the last', () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem
+			const dir = yield* fs.makeTempDirectoryScoped({ prefix: 'fold-event-log-' })
+			const filePath = join(dir, 'torn-middle.jsonl')
+
+			yield* Effect.gen(function* () {
+				const log = yield* EventLog
+				yield* log.append(makeSessionStarted('/tmp/one'))
+				yield* log.append(makeToolState(1))
+			}).pipe(Effect.provide(layerJsonl(filePath)))
+
+			const [first, second] = (yield* fs.readFileString(filePath)).split('\n').filter((l) => l.length > 0)
+			yield* fs.writeFileString(filePath, `${(first ?? '').slice(0, 20)}\n${second}\n`)
+
+			const result = yield* Effect.exit(
+				Effect.gen(function* () {
+					const log = yield* EventLog
+					return yield* Stream.runCollect(log.entries())
+				}).pipe(Effect.provide(layerJsonl(filePath))),
+			)
+
+			expect(result._tag).toBe('Failure')
+		}),
+	).pipe(Effect.provide(NodeFileSystem.layer)),
+)
