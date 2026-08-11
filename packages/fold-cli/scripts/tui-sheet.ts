@@ -78,7 +78,7 @@ const fixture = fixtures[fixtureName]
  * looks like it worked (the screen changes) while testing something else
  * entirely. Named keys are pressed; anything else is typed as literal text.
  */
-const namedKeys = new Set(['enter', 'escape', 'tab', 'backspace', 'up', 'down', 'left', 'right', 'space'])
+const namedKeys = new Set(['enter', 'escape', 'tab', 'shift-tab', 'backspace', 'up', 'down', 'left', 'right', 'space'])
 
 const sendKey = async (
 	session: { keyboard: { type: (text: string) => Promise<unknown>; press: (key: string) => Promise<unknown> } },
@@ -92,6 +92,13 @@ const sendKey = async (
 	// Arrows are `ArrowRight`, not `Right`: the bare name is rejected with
 	// "missing field `value`", which reads like a harness bug rather than a
 	// misspelled key.
+	if (lowered === 'shift-tab') {
+		// `press('Tab', { shift: true })` silently drops the modifier here: the app
+		// receives `shift=false`. The escape sequence for back-tab does arrive
+		// intact.
+		await session.keyboard.type('\u001b[Z')
+		return
+	}
 	const capitalised = lowered.charAt(0).toUpperCase() + lowered.slice(1)
 	const arrows = new Set(['up', 'down', 'left', 'right'])
 	const pressed = lowered === 'escape' ? 'Escape' : arrows.has(lowered) ? `Arrow${capitalised}` : capitalised

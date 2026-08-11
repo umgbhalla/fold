@@ -749,6 +749,13 @@ export const TuiApp = (props: TuiAppProps) => {
 				submitTargetDraft()
 				return
 			}
+			if (key.name === 'tab' && key.shift) {
+				key.preventDefault()
+				setTargetFocused(false)
+				targetEditor?.blur()
+				setNavigation((current) => ({ ...current, pane: 'context', level: 'pane' }))
+				return
+			}
 			if (key.name === 'tab') {
 				key.preventDefault()
 				setTargetVerb((current) => nextRootInputVerb(targetStatus(), current))
@@ -758,6 +765,18 @@ export const TuiApp = (props: TuiAppProps) => {
 		}
 		if (inputFocused()) {
 			if (key.name === 'escape') {
+				key.preventDefault()
+				blurComposers()
+				setNavigation((current) => ({ ...current, pane: 'events', level: 'pane' }))
+				return
+			}
+			if (key.name === 'tab' && key.shift) {
+				// Step out of the composer without leaving the session.
+				//
+				// Escape does this too, but the arrows do not: the focused editor
+				// consumes them for cursor movement, so they never reach this
+				// handler. Shift+Tab does reach it, and stepping out of a text field
+				// is what it means nearly everywhere else.
 				key.preventDefault()
 				blurComposers()
 				setNavigation((current) => ({ ...current, pane: 'events', level: 'pane' }))
