@@ -79,42 +79,59 @@ export const rowVisual = (
 	}
 }
 
+/**
+ * User and assistant turns carry no role label: the conversation reads as prose,
+ * separated by a blank line and told apart by weight (the user's turn is bold).
+ * Every other row keeps its label column, where the kind is not obvious.
+ */
 export const EventRow = (props: { readonly row: Accessor<ConversationRow> }) => {
 	const visual = createMemo(() => rowVisual(props.row()))
 	const isToolCall = createMemo(() => props.row().kind === 'tool-call')
+	const isUser = createMemo(() => props.row().kind === 'user')
+	const isMessage = createMemo(() => isUser() || props.row().kind === 'assistant')
 	const bodyColor = createMemo(() =>
 		isToolCall() ? tactical.color.textDim : visual().dim ? tactical.color.textDim : tactical.color.text,
 	)
+	const bodyAttributes = createMemo(() => {
+		if (isUser()) return TextAttributes.BOLD
+		return visual().dim ? TextAttributes.DIM : TextAttributes.NONE
+	})
 	const rendersMarkdown = createMemo(
 		() =>
-			['user', 'assistant', 'reasoning', 'compaction'].includes(props.row().kind) &&
+			!isUser() &&
+			['assistant', 'reasoning', 'compaction'].includes(props.row().kind) &&
 			containsMarkdown(props.row().text),
 	)
 	return (
-		<box flexDirection="row" flexShrink={0} width="100%" paddingLeft={1} paddingRight={1}>
+		<box
+			flexDirection="row"
+			flexShrink={0}
+			width="100%"
+			paddingLeft={1}
+			paddingRight={1}
+			paddingTop={isMessage() ? 1 : 0}
+		>
 			<box width={3} flexShrink={0}>
-				<text fg={visual().color} wrapMode="none">
+				<text fg={visual().color} attributes={isUser() ? TextAttributes.BOLD : TextAttributes.NONE} wrapMode="none">
 					{visual().glyph}
 				</text>
 			</box>
-			<box width={12} flexShrink={0}>
-				<text
-					fg={visual().color}
-					attributes={visual().dim ? TextAttributes.DIM : TextAttributes.NONE}
-					wrapMode="none"
-				>
-					{props.row().label}
-				</text>
-			</box>
+			<Show when={!isMessage()}>
+				<box width={12} flexShrink={0}>
+					<text
+						fg={visual().color}
+						attributes={visual().dim ? TextAttributes.DIM : TextAttributes.NONE}
+						wrapMode="none"
+					>
+						{props.row().label}
+					</text>
+				</box>
+			</Show>
 			<box flexGrow={1} flexShrink={1}>
 				{rendersMarkdown() ? (
 					<MarkdownText content={props.row().text} tone={visual().dim ? 'muted' : 'normal'} />
 				) : (
-					<text
-						fg={bodyColor()}
-						attributes={visual().dim ? TextAttributes.DIM : TextAttributes.NONE}
-						wrapMode="word"
-					>
+					<text fg={isUser() ? tactical.color.coreBright : bodyColor()} attributes={bodyAttributes()} wrapMode="word">
 						{props.row().text}
 					</text>
 				)}
