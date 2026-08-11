@@ -81,7 +81,7 @@ export const fxCommands = ({
 ]
 
 export const KeyHint = (props: { readonly keyName: string; readonly label: string }) => (
-	<text wrapMode="none">
+	<text wrapMode="none" flexShrink={0}>
 		<span style={{ fg: tactical.color.coreBright }}>{props.keyName}</span>
 		<span style={{ fg: tactical.color.textDim }}>{` ${props.label}`}</span>
 	</text>
@@ -94,7 +94,7 @@ const Toggle = (props: {
 	readonly status?: string
 	readonly verbose: boolean
 }) => (
-	<text wrapMode="none">
+	<text wrapMode="none" flexShrink={0}>
 		<span style={{ fg: tactical.color.coreBright }}>{props.label}</span>
 		{props.verbose ? <span style={{ fg: tactical.color.textDim }}>{` ${props.name}`}</span> : null}
 		<span style={{ fg: tactical.color.textDim }}>:</span>
@@ -106,7 +106,7 @@ const Toggle = (props: {
 
 export const FxFooter = (props: { readonly toggles: FxToggles; readonly verbose: boolean }) => (
 	<>
-		<text fg={tactical.color.textDim} wrapMode="none">
+		<text fg={tactical.color.textDim} wrapMode="none" flexShrink={0}>
 			FX//
 		</text>
 		<Toggle label="B" name="GLOW" enabled={props.toggles.glow} verbose={props.verbose} />

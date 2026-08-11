@@ -1268,7 +1268,7 @@ export const TuiApp = (props: TuiAppProps) => {
 				<KeyHint keyName="T" label="THEME" />
 				<box flexGrow={1} />
 				<FxFooter toggles={toggles()} verbose={verboseFooter()} />
-				<text fg={tactical.color.textFaint} wrapMode="none">
+				<text fg={tactical.color.textFaint} wrapMode="none" flexShrink={0}>
 					{tactical.name}
 				</text>
 			</box>

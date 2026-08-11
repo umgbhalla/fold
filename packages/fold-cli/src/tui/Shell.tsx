@@ -45,6 +45,20 @@ import type { TuiOptions } from './TuiSessionOptions'
 import { makeTuiSessionWorkspace, type TuiInitialSessionError } from './TuiSessionWorkspace'
 import { markChangeViewed } from './ViewedChanges'
 
+/**
+ * OpenTUI only flushes cells that differ between `nextRenderBuffer` and
+ * `currentRenderBuffer`. On view transitions the terminal can fall out of sync,
+ * leaving ghost cells (stale rows / dark background blocks) from the previous
+ * screen. Clearing the diff baseline (`currentRenderBuffer`) forces the next
+ * frame to repaint every cell. Cheap and only called on transitions, never per
+ * frame. `setBackgroundColor()` clears only `nextRenderBuffer`, which is not
+ * enough to invalidate the diff.
+ */
+const forceFullRepaint = (renderer: ReturnType<typeof createCliRenderer> extends Promise<infer R> ? R : never): void => {
+	renderer.currentRenderBuffer.clear()
+	renderer.requestRender()
+}
+
 export class TuiRequiresTtyError extends Schema.TaggedErrorClass<TuiRequiresTtyError>()('TuiRequiresTtyError', {}) {}
 export class TuiRendererError extends Schema.TaggedErrorClass<TuiRendererError>()('TuiRendererError', {
 	message: Schema.String,
@@ -422,6 +436,18 @@ export const runTui = (
 			try: () =>
 				render(() => {
 					const mode = () => `${workspace.currentMode()}${options.rpi === true ? '+rpi' : ''}`
+					// Force a full repaint on any transition that swaps large regions of the
+					// screen (route change, FX toggle change, theme change). Without this the
+					// OpenTUI diff leaves ghost cells from the previous view. See forceFullRepaint.
+					createEffect(() => {
+						const route = router.route()
+						// depend on the concrete route identity, incl. which session, so switching
+						// between two sessions also invalidates the stale diff baseline.
+						void (route._tag === 'session' ? route.sessionId : route._tag)
+						toggles()
+						themeId()
+						forceFullRepaint(renderer)
+					})
 					createEffect(() => {
 						const hosted = active()
 						if (hosted === null || loadedViewedChanges.has(hosted.sessionId)) return
