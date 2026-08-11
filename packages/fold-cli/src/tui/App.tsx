@@ -245,6 +245,17 @@ export const TuiApp = (props: TuiAppProps) => {
 	const nextRailTab = (): void => {
 		setRailTab((current) => (current === 'subagents' ? 'skills' : 'subagents'))
 	}
+	/**
+	 * The key of the newest row, as a memo of its own.
+	 *
+	 * Every row's `selected` accessor needs to know whether it is the live tail.
+	 * Reading `rows()` for that made each of the N rows a subscriber of the row
+	 * list, so one streamed token invalidated all of them and repainted the whole
+	 * transcript instead of the one line that grew. The key of the streaming row
+	 * does not change while its text does, so a memo over just the key settles to
+	 * the same string and stops the invalidation at the boundary.
+	 */
+	const lastRowKey = createMemo(() => rows().at(-1)?.key)
 	const rowKeys = createMemo(() => rows().map((row) => row.key))
 	const mode = createMemo(() => contextMode(navigation(), rowKeys()))
 	const readerMode = createMemo(() => (leftTab() === 'changes' ? 'inspect' : mode()))
@@ -1029,7 +1040,7 @@ export const TuiApp = (props: TuiAppProps) => {
 										row={row}
 										selected={() =>
 											navigation().selectedKey === row().key ||
-											(mode() === 'live' && row().key === rows().at(-1)?.key)
+											(mode() === 'live' && row().key === lastRowKey())
 										}
 									/>
 								)}
