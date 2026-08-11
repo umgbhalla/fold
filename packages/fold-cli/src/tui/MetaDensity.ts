@@ -31,6 +31,13 @@ export type MetaDensity = 'line' | 'expanded'
  * 26 expands, and nothing bleeds past the border at any size. At 26 the rail
  * still lists 7 of 15 agents beside the metadata (14 at 44 rows), so the block
  * summarises the list rather than replacing it.
+ *
+ * Cost, context and turns are deliberately not here: they are on the header
+ * line, which is always visible, so repeating them in a pane the user has to
+ * focus would be duplication. Checked against a live session, where the header
+ * reads `22k ctx (11%) · 18 turns · 3 agents`. Cost joins that line only when
+ * the model's catalog entry carries pricing, which is a property of the catalog
+ * rather than of this layout.
  */
 export const metaDensity = (width: number, height: number, focused: boolean): MetaDensity =>
 	focused && width >= 40 && height >= 26 ? 'expanded' : 'line'
