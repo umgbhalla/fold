@@ -150,3 +150,39 @@ word.
   timestamps are not wall-clock produces nonsense ages.
 - The header drops `· OFF` (the reasoning label) at 100 cols and the session id
   badge overlaps the pane border (`╚═sess_terminal_control  ╝`).
+
+## Outcome
+
+What was built, and where it is verified.
+
+**New pure modules, unit tested.**
+
+- `RowLayout.ts` — cells declare what they are worth, and optional ones are
+  dropped whole, in priority order, before the subject gives up a column.
+  `clampCell` cuts the middle rather than the tail, because the tail is what
+  discriminates (`Overflow task 1` vs `Overflow task 12`).
+- `SubagentActivity.ts` — what an agent is doing, from its own entries. Pairs
+  tool calls to results by id, so an agent that finished ten `bash` runs does
+  not claim to be running one. Split into `subagentScan` (log) and
+  `activityFromScan` (clock) so a tick does not rescan every log.
+- `PaneLayout.ts` — character widths, not percentages. Rail is 44 columns at
+  ≥140, 30 at 110-139, absent below 110, and absent with no subagents.
+- `Navigation.ts` — `movePane` walks only the panes on screen; `reconcilePane`
+  recovers when the rail vanishes under the cursor.
+
+**Rail.** One line per subagent; the selected row expands in place to show
+turns, tools, whether a tool is running and for how long, and the result or
+failure reason. Fourteen agents plus one expansion fit in seventeen rows where
+the old rail needed twenty-eight for less. The rail opens on SUBAGENTS, the only
+tab with navigable rows. Bars are share-of-total, so a single-item series no
+longer draws full.
+
+**Correctness fixes found by driving it.** Invalid branded ids crashed the app
+on any empty-log render and killed every fixture. A working subagent was
+reported as idle, because it emits nothing while a tool runs. A row growing at
+the bottom edge pushed its own detail lines out of view. The footer promised ESC
+would leave the session when it would only deselect an agent.
+
+**Feedback loop.** `bun run tui:sheet` renders a named fixture state at several
+widths in one pass. `bun run test:tui` was 5 of 13 and is now 13 of 13; it had
+been fully red because the fixtures crashed before first paint.
