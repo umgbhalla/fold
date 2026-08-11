@@ -37,11 +37,23 @@ const fixtureModel = {
  * Branded ids reject anything that is not `<prefix>_<21-32 lowercase alnum>`, and
  * `make` throws rather than returning an error, so a readable fixture label has
  * to be padded up to a legal cuid or the whole fixture dies before first paint.
+ *
+ * The padding is `a` rather than `0` because zero padding collides: `overflow1`
+ * and `overflow10` both become `overflow1` followed by zeros, so agents 1 and 10
+ * shared an id and the tenth rail row rendered the first one's description.
  */
-const fixtureCuid = (label: string): string => label.replaceAll(/[^a-z0-9]/g, '0').padEnd(24, '0').slice(0, 24)
+const fixtureCuid = (label: string): string => `${label.replaceAll(/[^a-z0-9]/g, 'a')}z`.padEnd(24, 'a').slice(0, 24)
 const fixtureMessageId = (label: string) => MessageId.make(`msg_${fixtureCuid(label)}`)
 const fixtureAgentId = (label: string) => AgentId.make(`agent_${fixtureCuid(label)}`)
 const fixtureToolCallId = (label: string) => ToolCallId.make(`tool_call_${fixtureCuid(label)}`)
+
+/**
+ * Fixture entries are stamped relative to launch so the rail's age column shows
+ * plausible ages. With the literal small numbers these used to carry, every row
+ * read `57y`, which made the column look broken while testing rail layout.
+ */
+const startedAt = Date.now()
+const at = (secondsAgo: number): number => startedAt - secondsAgo * 1_000
 
 const rootAgentId = fixtureAgentId('root')
 const researcherAgentId = fixtureAgentId('researcher')
@@ -56,7 +68,7 @@ const overflowSubagentEntries: ReadonlyArray<LogEntry> =
 					{
 						_tag: 'assistant-message',
 						seq: 100 + index * 2,
-						ts: 100 + index * 2,
+						ts: at(600 - index * 37),
 						agentId: rootAgentId,
 						parentAgentId: null,
 						toolCallId: null,
@@ -82,7 +94,7 @@ const overflowSubagentEntries: ReadonlyArray<LogEntry> =
 					{
 						_tag: 'agent_started',
 						seq: 101 + index * 2,
-						ts: 101 + index * 2,
+						ts: at(599 - index * 37),
 						agentId,
 						parentAgentId: rootAgentId,
 						toolCallId,
@@ -100,7 +112,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 	{
 		_tag: 'agent_started',
 		seq: 0,
-		ts: 0,
+		ts: at(900),
 		agentId: rootAgentId,
 		parentAgentId: null,
 		toolCallId: null,
@@ -114,7 +126,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 	{
 		_tag: 'system-message',
 		seq: 2,
-		ts: 2,
+		ts: at(880),
 		agentId: rootAgentId,
 		parentAgentId: null,
 		toolCallId: null,
@@ -133,7 +145,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 				{
 					_tag: 'assistant-message',
 					seq: 6,
-					ts: 6,
+					ts: at(300),
 					agentId: rootAgentId,
 					parentAgentId: null,
 					toolCallId: null,
@@ -157,7 +169,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 	{
 		_tag: 'system-message',
 		seq: 3,
-		ts: 3,
+		ts: at(870),
 		agentId: researcherAgentId,
 		parentAgentId: null,
 		toolCallId: null,
@@ -174,7 +186,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 	{
 		_tag: 'assistant-message',
 		seq: 4,
-		ts: 4,
+		ts: at(240),
 		agentId: researcherAgentId,
 		parentAgentId: null,
 		toolCallId: null,
@@ -198,7 +210,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 				{
 					_tag: 'agent-finished',
 					seq: 5,
-					ts: 5,
+					ts: at(120),
 					agentId: researcherAgentId,
 					parentAgentId: null,
 					toolCallId: null,
@@ -211,7 +223,7 @@ const subagentEntries: ReadonlyArray<LogEntry> = [
 	{
 		_tag: 'agent_started',
 		seq: 1,
-		ts: 1,
+		ts: at(890),
 		agentId: researcherAgentId,
 		parentAgentId: rootAgentId,
 		toolCallId: subagentToolCallId,
@@ -272,9 +284,7 @@ await render(
 			viewedPatchHashes={viewedPatchHashes}
 			onViewChange={(change) => setViewedPatchHashes((viewed) => markChangeViewed(viewed, change))}
 			onRefreshGit={() => setNotice('CHANGES REFRESHED')}
-			{...(process.env.FOLD_TUI_SUBAGENT_FIXTURE === '1'
-				? { initialSelectedAgentId: researcherAgentId }
-				: {})}
+			{...(process.env.FOLD_TUI_SUBAGENT_FIXTURE === '1' ? { initialSelectedAgentId: researcherAgentId } : {})}
 			notice={notice}
 			targetNotice={targetNotice}
 			onCompact={() => setNotice('COMPACTED')}

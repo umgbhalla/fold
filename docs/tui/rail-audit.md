@@ -55,7 +55,7 @@ spec died before first paint, so `bun run test:tui` had been fully red. Fixed in
 1. **Fixed percentage widths regardless of content.** `App.tsx:256-262`:
    events 32%, rail 28%, context gets the remainder. A session with one event
    and no subagents still pays 28% for the rail. Below 84 cols the reader is
-   the *smallest* pane (events 40 / rail 26 / reader 34).
+   the _smallest_ pane (events 40 / rail 26 / reader 34).
 
 2. **The default rail tab is the one you cannot use.** `railTab` defaults to
    `'meta'`, and both `moveWithinPane` (`App.tsx:442-446`) and `jumpWithinPane`
@@ -77,8 +77,8 @@ spec died before first paint, so `bun run test:tui` had been fully red. Fixed in
    10 (bar) + 3 (count) + 3 gaps = 30 cols to convey `subagent 1`.
 
 7. **SKILLS is a modal task wearing a pane.** Select, press Enter, confirm Y/N.
-   Nothing about it needs to be resident. It also always shows the *selected
-   agent's* skills, which is invisible from the rail itself.
+   Nothing about it needs to be resident. It also always shows the _selected
+   agent's_ skills, which is invisible from the rail itself.
 
 8. **No stacked/expanding disclosure anywhere.** Highlighting a subagent shows
    the same two lines whether it is selected or not (`App.tsx:1244-1293`,
@@ -97,7 +97,7 @@ spec died before first paint, so `bun run test:tui` had been fully red. Fixed in
 
 Every rail row is a hand-rolled table of fixed-width `<text width={n}>` cells with
 one `flexGrow` cell absorbing the remainder. When the pane is narrow the fixed
-cells keep their width and the *meaningful* cell is the one that collapses.
+cells keep their width and the _meaningful_ cell is the one that collapses.
 
 **Subagent row** (`App.tsx:1256-1289`): marker `width={2}` + gap + description
 `flexGrow` + age `width={4}` + gap + `ActivityIndicator width={12}`. At 160 cols
@@ -147,4 +147,3 @@ word.
   timestamps are not wall-clock produces nonsense ages.
 - The header drops `· OFF` (the reasoning label) at 100 cols and the session id
   badge overlaps the pane border (`╚═sess_terminal_control  ╝`).
-

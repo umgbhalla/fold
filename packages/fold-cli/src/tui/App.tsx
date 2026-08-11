@@ -9,7 +9,6 @@ import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
 import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid'
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show, type Accessor } from 'solid-js'
 
-import { agentTypeAccent } from './AccentPalette'
 import { ActivityIndicator, type ActivityState } from './ActivityIndicator'
 import { CommandPalette, type TuiCommand } from './CommandPalette'
 import { nextRootInputVerb, normalizeRootInputVerb, rootInputVerbLabel, type RootInputVerb } from './Converse'
@@ -28,6 +27,7 @@ import {
 } from './Navigation'
 import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
+import { paneWidths, railInnerWidth } from './PaneLayout'
 import {
 	conversationRows,
 	durableConversationRows,
@@ -39,7 +39,8 @@ import {
 	type SessionState,
 } from './SessionState'
 import { SkillsRail } from './SkillsRail'
-import { metaCounts, relativeSubagentTime, skillViews, subagentViews, type SubagentView } from './Subagents'
+import { SubagentRow } from './SubagentRow'
+import { metaCounts, skillViews, subagentViews, type SubagentView } from './Subagents'
 import { theme as tactical } from './ThemeState'
 import { TUI_CONTEXT_TITLE, TUI_INSPECT_BADGE, TUI_LIVE_BADGE, tuiScrollbarOptions } from './TuiChrome'
 import { createFxControls, FxFooter, fxCommands, KeyHint } from './TuiControls'
@@ -261,13 +262,11 @@ export const TuiApp = (props: TuiAppProps) => {
 		const selected = selectedRow()
 		return mode() === 'inspect' && selected !== undefined ? [selected] : rows()
 	})
-	const eventPaneWidth = createMemo(() => (dimensions().width < 84 ? '40%' : '32%'))
-	const railPaneWidth = createMemo(() => (dimensions().width < 118 ? '26%' : '28%'))
-	const contextPaneWidth = createMemo(() => {
-		const eventRatio = dimensions().width < 84 ? 0.4 : 0.32
-		const railRatio = dimensions().width < 118 ? 0.26 : 0.28
-		return Math.floor(dimensions().width * (1 - eventRatio - railRatio))
-	})
+	const panes = createMemo(() => paneWidths(dimensions().width, agents().length))
+	const eventPaneWidth = createMemo(() => panes().events)
+	const railPaneWidth = createMemo(() => panes().rail)
+	const railInner = createMemo(() => railInnerWidth(panes().rail))
+	const contextPaneWidth = createMemo(() => panes().context)
 	const verboseFooter = createMemo(() => dimensions().width >= 160)
 	const verbLabel = createMemo(() => rootInputVerbLabel(verb()))
 	const isCompacting = createMemo(() => props.compacting?.() === true)
@@ -1187,123 +1186,89 @@ export const TuiApp = (props: TuiAppProps) => {
 						</box>
 					</Show>
 				</box>
-				<box
-					width={railPaneWidth()}
-					flexShrink={0}
-					flexDirection="column"
-					border
-					borderStyle={
-						paneState('subagents') === 'focused'
-							? tactical.chrome.frameStyle
-							: paneState('subagents') === 'selected'
-								? 'double'
-								: tactical.chrome.panelStyle
-					}
-					borderColor={paneBorderColor('subagents')}
-					title={paneTitle('subagents', railTab().toUpperCase())}
-					titleColor={paneTitleColor('subagents')}
-					backgroundColor={tactical.color.panel}
-				>
-					<box height={1} flexDirection="row" gap={2} paddingLeft={1}>
-						<text
-							fg={railTab() === 'subagents' ? tactical.color.coreBright : tactical.color.textDim}
-							onMouseDown={() => setRailTab('subagents')}
-						>
-							SUBAGENTS
-						</text>
-						<text
-							fg={railTab() === 'meta' ? tactical.color.coreBright : tactical.color.textDim}
-							onMouseDown={() => setRailTab('meta')}
-						>
-							META
-						</text>
-						<text
-							fg={railTab() === 'skills' ? tactical.color.coreBright : tactical.color.textDim}
-							onMouseDown={() => setRailTab('skills')}
-						>
-							SKILLS
-						</text>
-						<box flexGrow={1} />
-						<text fg={tactical.color.grid}>{meta().running} RUN</text>
-					</box>
-					<Show
-						when={railTab() === 'subagents'}
-						fallback={
-							railTab() === 'meta' ? (
-								<MetaRail meta={meta()} />
-							) : (
-								<SkillsRail
-									skills={skills()}
-									selected={selectedSkill()}
-									active={navigation().pane === 'subagents'}
-									onSelect={setSelectedSkill}
-								/>
-							)
+				{/* The rail is not rendered at zero width: an empty bordered column is
+				    still two columns of border, and a session with no subagents should
+				    not pay for a panel that has nothing to list. */}
+				<Show when={railPaneWidth() > 0}>
+					<box
+						width={railPaneWidth()}
+						flexShrink={0}
+						flexDirection="column"
+						border
+						borderStyle={
+							paneState('subagents') === 'focused'
+								? tactical.chrome.frameStyle
+								: paneState('subagents') === 'selected'
+									? 'double'
+									: tactical.chrome.panelStyle
 						}
+						borderColor={paneBorderColor('subagents')}
+						title={paneTitle('subagents', railTab().toUpperCase())}
+						titleColor={paneTitleColor('subagents')}
+						backgroundColor={tactical.color.panel}
 					>
-						<scrollbox
-							ref={(renderable) => (subagentsScroller = renderable)}
-							flexGrow={1}
-							scrollY
-							scrollbarOptions={tuiScrollbarOptions()}
+						<box height={1} flexDirection="row" gap={2} paddingLeft={1}>
+							<text
+								fg={railTab() === 'subagents' ? tactical.color.coreBright : tactical.color.textDim}
+								onMouseDown={() => setRailTab('subagents')}
+							>
+								SUBAGENTS
+							</text>
+							<text
+								fg={railTab() === 'meta' ? tactical.color.coreBright : tactical.color.textDim}
+								onMouseDown={() => setRailTab('meta')}
+							>
+								META
+							</text>
+							<text
+								fg={railTab() === 'skills' ? tactical.color.coreBright : tactical.color.textDim}
+								onMouseDown={() => setRailTab('skills')}
+							>
+								SKILLS
+							</text>
+							<box flexGrow={1} />
+							<text fg={tactical.color.grid}>{meta().running} RUN</text>
+						</box>
+						<Show
+							when={railTab() === 'subagents'}
+							fallback={
+								railTab() === 'meta' ? (
+									<MetaRail meta={meta()} />
+								) : (
+									<SkillsRail
+										skills={skills()}
+										selected={selectedSkill()}
+										active={navigation().pane === 'subagents'}
+										width={railInner()}
+										onSelect={setSelectedSkill}
+									/>
+								)
+							}
 						>
-							<Index each={agents()} fallback={<text fg={tactical.color.textFaint}> NO SUBAGENTS</text>}>
-								{(agent) => (
-									<box
-										id={`subagent:${agent().agentId}`}
-										paddingLeft={1}
-										height={2}
-										flexDirection="column"
-										backgroundColor={
-											selectedAgentId() === agent().agentId
-												? tactical.color.raised
-												: tactical.color.panel
-										}
-										onMouseDown={() => setSelectedAgentId(agent().agentId)}
-									>
-										<box height={1} flexDirection="row" gap={1}>
-											<text width={2} fg={agentTypeAccent(agent().type)} wrapMode="none">
-												{selectedAgentId() === agent().agentId ? '▸' : '▌'}
-											</text>
-											<text
-												flexGrow={1}
-												wrapMode="none"
-												truncate
-												fg={agentTypeAccent(agent().type)}
-												{...(selectedAgentId() === agent().agentId
-													? { attributes: TextAttributes.BOLD }
-													: {})}
-											>
-												{agent().description}
-											</text>
-											<text width={4} fg={tactical.color.textFaint} wrapMode="none">
-												{relativeSubagentTime(agent().calledAt, now())}
-											</text>
-											<ActivityIndicator
-												state={
-													agent().status === 'running'
-														? 'running'
-														: agent().status === 'done'
-															? 'ready'
-															: agent().status === 'error'
-																? 'error'
-																: 'stopped'
-												}
-												label={
-													agent().status === 'done' ? 'DONE' : agent().status.toUpperCase()
-												}
-												width={12}
-											/>
-										</box>
-										<text fg={tactical.color.textDim} paddingLeft={3} wrapMode="none" truncate>
-											{agent().type}
-										</text>
-									</box>
-								)}
-							</Index>
-						</scrollbox>
-					</Show>
-				</box>
+							<scrollbox
+								ref={(renderable) => (subagentsScroller = renderable)}
+								flexGrow={1}
+								scrollY
+								scrollbarOptions={tuiScrollbarOptions()}
+							>
+								<Index
+									each={agents()}
+									fallback={<text fg={tactical.color.textFaint}> NO SUBAGENTS</text>}
+								>
+									{(agent) => (
+										<SubagentRow
+											agent={agent()}
+											selected={selectedAgentId() === agent().agentId}
+											now={now()}
+											width={railInner()}
+											onSelect={() => setSelectedAgentId(agent().agentId)}
+										/>
+									)}
+								</Index>
+							</scrollbox>
+						</Show>
+					</box>
+				</Show>
 			</box>
 			<box
 				flexDirection="row"
