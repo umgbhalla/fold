@@ -327,6 +327,12 @@ export const EventIndexRow = (props: {
 			.replace(/(```|`|\*\*|__|[*_>#])/g, '')
 			.trim(),
 	)
+	// A message needs no role word: the glyph already says whose turn it is, and
+	// the gutter used to be one cell too narrow, so the name ran into the text
+	// ("assistantSup. What are we..."). Tool and system rows keep their name.
+	const isUser = createMemo(() => props.row().kind === 'user')
+	const isMessage = createMemo(() => isUser() || props.row().kind === 'assistant')
+	const gutterLabel = createMemo(() => (isMessage() ? '' : props.row().label.toLowerCase()).padEnd(9, ' '))
 	return (
 		<box
 			id={`event:${props.row().key}`}
@@ -337,19 +343,23 @@ export const EventIndexRow = (props: {
 			paddingRight={0}
 			backgroundColor={props.selected() ? tactical.color.raised : tactical.color.panel}
 		>
-			<box width={17} flexShrink={0}>
+			<box width={18} flexShrink={0}>
 				<text wrapMode="none">
 					<span style={{ fg: tactical.color.coreBright }}>{props.selected() ? '▸' : ' '}</span>
 					<span style={{ fg: tactical.color.textFaint }}>{sequence()}</span>
-					<span style={{ fg: visual().color }}>
-						{` ${visual().glyph} ${props.row().label.toLowerCase().padEnd(9, ' ')} `}
-					</span>
+					<span style={{ fg: visual().color }}>{` ${visual().glyph} ${gutterLabel()} `}</span>
 				</text>
 			</box>
-			<text fg={props.selected() ? tactical.color.text : tactical.color.textDim} flexGrow={1} wrapMode="none">
+			<text
+				fg={props.selected() || isUser() ? tactical.color.text : tactical.color.textDim}
+				attributes={isUser() ? TextAttributes.BOLD : TextAttributes.NONE}
+				flexGrow={1}
+				flexShrink={1}
+				wrapMode="none"
+			>
 				{summary()}
 			</text>
-			<text fg={visual().color} width={6} paddingLeft={1} wrapMode="none">
+			<text fg={visual().color} width={6} flexShrink={0} paddingLeft={1} wrapMode="none">
 				{status()}
 			</text>
 		</box>
