@@ -16,7 +16,6 @@ import { makeCodexAuth, makeCodexAuthStore } from '@humanlayer/fold-codex'
 import type { SessionId } from '@humanlayer/fold-core'
 import { makeOpenCodeAuth, makeOpenCodeAuthStore } from '@humanlayer/fold-opencode'
 import { ALL_FX_ON, type FxToggles } from '@humanlayer/fold-tui-theme/postfx'
-import { nextThemeId, type ThemeId } from '@humanlayer/fold-tui-theme/themes'
 import { makeXaiAuth, makeXaiAuthStore } from '@humanlayer/fold-xai'
 import { createCliRenderer } from '@opentui/core'
 import { render } from '@opentui/solid'
@@ -38,7 +37,6 @@ import {
 } from './ProviderAuth'
 import { ProviderConfigPage } from './ProviderConfigPage'
 import { SessionPicker } from './SessionPicker'
-import { setCurrentTheme } from './ThemeState'
 import { bootstrapTuiConfig } from './TuiConfigBootstrap'
 import { makeTuiRouter } from './TuiRouter'
 import type { TuiOptions } from './TuiSessionOptions'
@@ -107,7 +105,6 @@ export const runTui = (
 			catch: (error) => new TuiRendererError({ message: String(error) }),
 		})
 		yield* Effect.addFinalizer(() => Effect.sync(() => renderer.destroy()))
-		const [themeId, setThemeId] = createSignal<ThemeId>('tactical')
 		const [config, setConfig] = createSignal<FoldConfig | null>(initialConfig)
 		const [configuration, setConfiguration] = createSignal<ModelConfiguration>(initialConfiguration)
 		const [focusInputOnActivation, setFocusInputOnActivation] = createSignal(false)
@@ -123,11 +120,6 @@ export const runTui = (
 		const [viewedChanges, setViewedChanges] = createSignal<Readonly<Record<string, ViewedPatchHashes>>>({})
 		const loadedViewedChanges = new Set<SessionId>()
 		let gitRefreshGeneration = 0
-		const selectTheme = (id: ThemeId): void => {
-			setCurrentTheme(id)
-			setThemeId(id)
-		}
-		const cycleTheme = (): void => selectTheme(nextThemeId(themeId()))
 		const refreshGit = (cwd: string): void => {
 			const generation = ++gitRefreshGeneration
 			setGitSnapshot({ _tag: 'loading', message: 'REFRESHING GIT SNAPSHOT' })
@@ -450,7 +442,6 @@ export const runTui = (
 						// between two sessions also invalidates the stale diff baseline.
 						void (route._tag === 'session' ? route.sessionId : route._tag)
 						toggles()
-						themeId()
 						forceFullRepaint(renderer)
 					})
 					createEffect(() => {
@@ -496,8 +487,6 @@ export const runTui = (
 											onQuit={() => renderer.destroy()}
 											toggles={toggles}
 											setToggles={setToggles}
-											onCycleTheme={cycleTheme}
-											onSelectTheme={selectTheme}
 										/>
 									}
 								>
@@ -547,8 +536,6 @@ export const runTui = (
 											onInjectSkill={current().injectSkill}
 											toggles={toggles}
 											setToggles={setToggles}
-											onCycleTheme={cycleTheme}
-											onSelectTheme={selectTheme}
 											onNewSession={(request) => activate(workspace.create(request), true)}
 											onConfigureModels={current().configureModels}
 											onBackToSessions={router.showPicker}

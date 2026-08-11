@@ -10,7 +10,7 @@ import { ItemList } from './components/ItemList'
 import type { Feed, ItemKind } from './github/types'
 import { ALL_FX_ON, installPostFx, nextVignetteMode } from './hud/postfx'
 import type { FxToggles } from './hud/postfx'
-import { nextThemeId, THEMES, ThemeProvider } from './theme/index'
+import { THEMES, ThemeProvider } from './theme/index'
 import type { ThemeId } from './theme/index'
 
 const LIST_WIDTH = 40
@@ -28,7 +28,7 @@ export function App({ feed, initialTheme }: AppProps) {
 	const renderer = useRenderer()
 	const { width } = useTerminalDimensions()
 
-	const [themeId, setThemeId] = useState<ThemeId>(initialTheme)
+	const [themeId] = useState<ThemeId>(initialTheme)
 	const [toggles, setToggles] = useState<FxToggles>(ALL_FX_ON)
 	const [kind, setKind] = useState<ItemKind>('pr')
 	const [cursor, setCursor] = useState<Record<ItemKind, number>>({ pr: 0, issue: 0 })
@@ -78,7 +78,7 @@ export function App({ feed, initialTheme }: AppProps) {
 			case 'tab':
 				return setKind((prev) => (prev === 'pr' ? 'issue' : 'pr'))
 			case 't':
-				return setThemeId(nextThemeId)
+				return
 			case 'b':
 				return setToggles((prev) => ({ ...prev, glow: !prev.glow }))
 			case 's':

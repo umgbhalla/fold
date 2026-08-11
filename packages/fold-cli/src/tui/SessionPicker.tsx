@@ -2,7 +2,6 @@
 import type { ModelConfiguration, SessionSummary } from '@humanlayer/fold-agent'
 import type { SessionId } from '@humanlayer/fold-core'
 import { nextVignetteMode, type FxToggles } from '@humanlayer/fold-tui-theme/postfx'
-import type { ThemeId } from '@humanlayer/fold-tui-theme/themes'
 import { TextAttributes, type KeyEvent } from '@opentui/core'
 import { useKeyboard, useTerminalDimensions } from '@opentui/solid'
 import { createEffect, createMemo, createSignal, Index, Show, type Accessor } from 'solid-js'
@@ -13,7 +12,7 @@ import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
 import { relativeSessionTime, shortSessionId } from './SessionPickerState'
 import { theme as tactical } from './ThemeState'
-import { createFxControls, FxFooter, fxCommands, KeyHint, themeCommands } from './TuiControls'
+import { createFxControls, FxFooter, fxCommands, KeyHint } from './TuiControls'
 
 export type SessionPickerProps = {
 	readonly cwd: string
@@ -30,8 +29,6 @@ export type SessionPickerProps = {
 	readonly onQuit: () => void
 	readonly toggles?: Accessor<FxToggles>
 	readonly setToggles?: (update: (current: FxToggles) => FxToggles) => void
-	readonly onCycleTheme?: () => void
-	readonly onSelectTheme?: (theme: ThemeId) => void
 }
 
 export type SessionPickerRow = SessionSummary & { readonly contextPercent: number | null }
@@ -48,6 +45,18 @@ export const SessionPicker = (props: SessionPickerProps) => {
 	const showModeProfile = createMemo(() => dimensions().width >= 105)
 	const showProviderModel = createMemo(() => dimensions().width >= 130)
 	const verboseFooter = createMemo(() => dimensions().width >= 120)
+	/**
+	 * The title column is elastic, and a long title used to run straight into
+	 * MODE ("Dev Tools and Comrlm+rpi"). Clip it to the room the fixed columns
+	 * leave: 2 marker + 13 id + 12 state + 8 turns + 10 context + 12 updated + 2
+	 * padding, plus the optional mode (24) and provider (36) columns.
+	 */
+	const titleWidth = createMemo(() => {
+		const fixed = 2 + 13 + 12 + 8 + 10 + 12 + 2 + (showModeProfile() ? 24 : 0) + (showProviderModel() ? 36 : 0)
+		return Math.max(8, dimensions().width - fixed)
+	})
+	const clipTitle = (title: string): string =>
+		title.length <= titleWidth() ? title : `${title.slice(0, Math.max(1, titleWidth() - 2))}…`
 	const pickerHints = createMemo(() =>
 		dimensions().width >= 100
 			? '↑↓/JK SELECT · GG/G FIRST/LAST · ENTER OPEN · X DELETE · ^N NEW · Q QUIT'
@@ -66,7 +75,6 @@ export const SessionPicker = (props: SessionPickerProps) => {
 		else props.onOpen(session.sessionId)
 	}
 	const paletteCommands = createMemo<ReadonlyArray<TuiCommand>>(() => {
-		const themes = themeCommands(props.onSelectTheme)
 		const fx = fxCommands({ toggles, setToggles })
 		const commands: Array<TuiCommand> = [
 			{
@@ -103,7 +111,6 @@ export const SessionPicker = (props: SessionPickerProps) => {
 				],
 			},
 			...fx.slice(0, 4),
-			{ id: 'theme', title: 'Switch theme…', category: 'VIEW', shortcut: 'T', children: themes },
 			fx[4],
 			{ id: 'quit', title: 'Quit Fold', category: 'APPLICATION', shortcut: 'Q', run: props.onQuit },
 		]
@@ -180,9 +187,6 @@ export const SessionPicker = (props: SessionPickerProps) => {
 			case 'q':
 				props.onQuit()
 				return
-			case 't':
-				props.onCycleTheme?.()
-				return
 			case 'b':
 				setToggles((value) => ({ ...value, glow: !value.glow }))
 				return
@@ -223,8 +227,6 @@ export const SessionPicker = (props: SessionPickerProps) => {
 				</box>
 				<box flexGrow={1} />
 				<text wrapMode="none">
-					<span style={{ fg: tactical.color.coreBright }}>{tactical.name}</span>
-					<span style={{ fg: tactical.color.textDim }}> · </span>
 					<span style={{ fg: tactical.color.grid }}>{`${props.sessions().length} sessions`}</span>
 				</text>
 			</box>
@@ -248,7 +250,7 @@ export const SessionPicker = (props: SessionPickerProps) => {
 						<text fg={tactical.color.textFaint} width={12} wrapMode="none">
 							STATE
 						</text>
-						<text fg={tactical.color.textFaint} flexGrow={1} wrapMode="none">
+						<text fg={tactical.color.textFaint} width={titleWidth()} flexShrink={0} wrapMode="none">
 							TITLE
 						</text>
 						<Show when={showModeProfile()}>
@@ -294,10 +296,11 @@ export const SessionPicker = (props: SessionPickerProps) => {
 								<ActivityIndicator state={session().status} width={12} />
 								<text
 									fg={selected() === index ? tactical.color.text : tactical.color.textDim}
-									flexGrow={1}
+									width={titleWidth()}
+									flexShrink={0}
 									wrapMode="none"
 								>
-									{session().title}
+									{clipTitle(session().title)}
 								</text>
 								<Show when={showModeProfile()}>
 									<text fg={tactical.color.textDim} width={24} wrapMode="none">
@@ -362,7 +365,6 @@ export const SessionPicker = (props: SessionPickerProps) => {
 				<KeyHint keyName="X" label="DELETE" />
 				<KeyHint keyName="^N" label="NEW" />
 				<KeyHint keyName="^K" label="COMMANDS" />
-				<KeyHint keyName="T" label="THEME" />
 				<KeyHint keyName="Q" label="QUIT" />
 				<box flexGrow={1} />
 				<FxFooter toggles={toggles()} verbose={verboseFooter()} />

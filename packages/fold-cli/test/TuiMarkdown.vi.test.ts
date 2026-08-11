@@ -5,13 +5,15 @@ import { containsMarkdown } from '../src/tui/MarkdownDetection'
 import { markdownStyleDefinitions, markdownTableOptions } from '../src/tui/MarkdownStyle'
 
 describe('TUI markdown theme', () => {
-	it('styles emphasis, links, code, and syntax with TACTICAL tokens', () => {
+	it('styles emphasis, links, code, and syntax with theme tokens', () => {
 		const styles = markdownStyleDefinitions('normal')
 
 		expect(styles['markup.strong']).toMatchObject({ bold: true })
 		expect(styles['markup.italic']).toMatchObject({ italic: true })
 		expect(styles['markup.link']).toMatchObject({ underline: true })
-		expect(styles['markup.list']).toEqual({ fg: tactical.color.core })
+		// List markers follow opencode: the cool grid tone, not the warm primary.
+		expect(styles['markup.list']).toEqual({ fg: tactical.color.grid })
+		expect(styles['markup.link']).toEqual({ fg: tactical.color.core, underline: true })
 		expect(styles['markup.raw.block']).toHaveProperty('bg')
 		expect(styles.keyword).toMatchObject({ bold: true })
 	})

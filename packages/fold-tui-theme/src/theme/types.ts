@@ -1,6 +1,7 @@
 import type { BorderStyle } from '@opentui/core'
 
-export type ThemeId = 'rapture' | 'tactical' | 'neuromancer' | 'redalert' | 'covenant' | 'wintermute'
+/** fold ships one theme; the alias stays so callers keep a name for it. */
+export type ThemeId = 'tactical'
 
 export interface GlitchSpec {
 	/** Expected number of glitch bursts per second. */

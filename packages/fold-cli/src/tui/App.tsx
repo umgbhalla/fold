@@ -2,7 +2,6 @@
 import type { ModelConfiguration } from '@humanlayer/fold-agent'
 import { AgentId } from '@humanlayer/fold-core'
 import { installPostFx, nextVignetteMode, type FxToggles } from '@humanlayer/fold-tui-theme/postfx'
-import type { ThemeId } from '@humanlayer/fold-tui-theme/themes'
 import { TextAttributes, type KeyEvent, type ScrollBoxRenderable, type TextareaRenderable } from '@opentui/core'
 import { registerManagedTextareaLayer } from '@opentui/keymap/addons/opentui'
 import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
@@ -42,7 +41,7 @@ import { SkillsRail } from './SkillsRail'
 import { metaCounts, relativeSubagentTime, skillViews, subagentViews, type SubagentView } from './Subagents'
 import { theme as tactical } from './ThemeState'
 import { TUI_CONTEXT_TITLE, TUI_INSPECT_BADGE, TUI_LIVE_BADGE, tuiScrollbarOptions } from './TuiChrome'
-import { createFxControls, FxFooter, fxCommands, KeyHint, themeCommands } from './TuiControls'
+import { createFxControls, FxFooter, fxCommands, KeyHint } from './TuiControls'
 import { prepareTuiKeyboard } from './TuiKeymap'
 import { isChangeViewed, type ViewedPatchHashes } from './ViewedChanges'
 
@@ -67,8 +66,6 @@ export type TuiAppProps = {
 	readonly onCopySessionId?: () => void
 	readonly toggles?: Accessor<FxToggles>
 	readonly setToggles?: (update: (current: FxToggles) => FxToggles) => void
-	readonly onCycleTheme?: () => void
-	readonly onSelectTheme?: (theme: ThemeId) => void
 	readonly onStop?: () => void
 	readonly onTargetSubmit?: (agentId: string, text: string, verb: RootInputVerb) => void
 	readonly onTargetInterrupt?: (agentId: string) => void
@@ -271,7 +268,6 @@ export const TuiApp = (props: TuiAppProps) => {
 		return level === null ? '' : ` · ${level.toUpperCase()}`
 	})
 	const paletteCommands = createMemo<ReadonlyArray<TuiCommand>>(() => {
-		const themes = themeCommands(props.onSelectTheme)
 		const fx = fxCommands({ toggles, setToggles })
 		const commands: Array<TuiCommand> = [
 			{
@@ -327,7 +323,6 @@ export const TuiApp = (props: TuiAppProps) => {
 					]
 				: []),
 			...fx.slice(0, 4),
-			{ id: 'theme', title: 'Switch theme…', category: 'VIEW', shortcut: 'T', children: themes },
 			fx[4],
 			{ id: 'quit', title: 'Quit Fold', category: 'APPLICATION', shortcut: 'Q', run: () => renderer.destroy() },
 		]
@@ -731,9 +726,6 @@ export const TuiApp = (props: TuiAppProps) => {
 				return
 			case 'r':
 				setToggles((current) => ({ ...current, rollingBar: !current.rollingBar }))
-				return
-			case 't':
-				props.onCycleTheme?.()
 				return
 			case 'd':
 				toggleChanges()
@@ -1306,12 +1298,8 @@ export const TuiApp = (props: TuiAppProps) => {
 				<KeyHint keyName="^K" label="COMMANDS" />
 				<KeyHint keyName="^C" label="INTRPT" />
 				<KeyHint keyName="Q" label="QUIT" />
-				<KeyHint keyName="T" label="THEME" />
 				<box flexGrow={1} />
 				<FxFooter toggles={toggles()} verbose={verboseFooter()} />
-				<text fg={tactical.color.textFaint} wrapMode="none" flexShrink={0}>
-					{tactical.name}
-				</text>
 			</box>
 			<box
 				position="absolute"

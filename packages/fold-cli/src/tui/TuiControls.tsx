@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 import { ALL_FX_ON, type FxToggles } from '@humanlayer/fold-tui-theme/postfx'
-import { THEMES, THEME_ORDER, type ThemeId } from '@humanlayer/fold-tui-theme/themes'
 import { createSignal, type Accessor } from 'solid-js'
 
 import type { TuiCommand } from './CommandPalette'
@@ -25,14 +24,6 @@ export const createFxControls = (
 	})
 	return { toggles: () => toggles?.() ?? fallback(), setToggles: setToggles ?? setFallback }
 }
-
-export const themeCommands = (onSelect?: (theme: ThemeId) => void): ReadonlyArray<TuiCommand> =>
-	THEME_ORDER.map((id) => ({
-		id: `theme.${id}`,
-		title: THEMES[id].name,
-		category: 'VIEW',
-		run: () => onSelect?.(id),
-	}))
 
 export const fxCommands = ({
 	toggles,

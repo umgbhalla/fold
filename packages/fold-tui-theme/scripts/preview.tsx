@@ -1,11 +1,11 @@
 /**
  * Render a single frame to plain text and print it.
  *
- * Lets you iterate on layout without a TTY, and diff the two themes:
+ * Lets you iterate on layout without a TTY:
  *
- *   bun run scripts/preview.tsx --theme tactical --size 140x44
+ *   bun run scripts/preview.tsx --size 140x44
  *   bun run scripts/preview.tsx --keys tab,j,j
- *   bun run scripts/preview.tsx --theme rapture --spans   # fg-color histogram
+ *   bun run scripts/preview.tsx --spans   # fg-color histogram
  *
  * `--keys` delivers a comma-separated key sequence, driving the app the same way
  * a user would. Two non-obvious things make this work:

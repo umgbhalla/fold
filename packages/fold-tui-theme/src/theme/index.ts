@@ -1,41 +1,25 @@
 import { createContext, useContext } from 'react'
 
-import { covenant } from './covenant'
-import { neuromancer } from './neuromancer'
-import { rapture } from './rapture'
-import { redalert } from './redalert'
 import { tactical } from './tactical'
 import type { Theme, ThemeId } from './types'
-import { wintermute } from './wintermute'
 
 export * from './types'
 
-/** The `t`-key cycle order: the two shipped themes first, then the experiments. */
-export const THEME_ORDER = [
-	'tactical',
-	'wintermute',
-	'neuromancer',
-	'redalert',
-	'covenant',
-	'rapture',
-] as const satisfies readonly ThemeId[]
+/**
+ * fold ships ONE theme.
+ *
+ * Six themes existed and every one of them failed on readability: the dim tier
+ * that carries labels, borders and footers measured 2.4-4.6:1 against its own
+ * background. There is now a single palette held above fixed contrast floors
+ * (see tactical.ts), so there is nothing to cycle and no way to pick a
+ * worse-looking one. The registry shape stays for callers.
+ */
+export const THEME_ORDER = ['tactical'] as const satisfies readonly ThemeId[]
 
-export const THEMES: Readonly<Record<ThemeId, Theme>> = {
-	rapture,
-	tactical,
-	neuromancer,
-	redalert,
-	covenant,
-	wintermute,
-}
+export const THEMES: Readonly<Record<ThemeId, Theme>> = { tactical }
 
 export function isThemeId(value: string): value is ThemeId {
 	return Object.hasOwn(THEMES, value)
-}
-
-export function nextThemeId(current: ThemeId): ThemeId {
-	const index = THEME_ORDER.indexOf(current)
-	return THEME_ORDER[(index + 1) % THEME_ORDER.length] ?? 'tactical'
 }
 
 const ThemeContext = createContext<Theme>(tactical)
