@@ -28,7 +28,8 @@
 		"typecheck": "tsc --noEmit",
 		"test": "bun vitest run",
 		"test:tui": "FOLD_TUI_TERMINAL_TEST=1 bun vitest run test/TuiModelSelectionTerminalControl.vi.test.ts && FOLD_TUI_TERMINAL_TEST=1 bun vitest run test/TuiSessionPickerTerminalControl.vi.test.ts && FOLD_TUI_TERMINAL_TEST=1 bun vitest run test/TuiCompactionTerminalControl.vi.test.ts && FOLD_TUI_TERMINAL_TEST=1 bun vitest run test/TuiToolInspectTerminalControl.vi.test.ts && FOLD_TUI_TERMINAL_TEST=1 bun vitest run test/TuiTerminalControl.vi.test.ts",
-		"test:watch": "bun vitest"
+		"test:watch": "bun vitest",
+		"tui:sheet": "bun run scripts/tui-sheet.ts"
 	},
 	"dependencies": {
 		"@opentui/core": "catalog:",
