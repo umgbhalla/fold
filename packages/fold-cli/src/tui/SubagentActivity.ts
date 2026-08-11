@@ -157,25 +157,26 @@ const finishOf = (entries: ReadonlyArray<LogEntry>): AgentFinishedLogEntry | und
 	entries.filter((entry): entry is AgentFinishedLogEntry => entry._tag === 'agent-finished').at(-1)
 
 /**
- * Project one subagent's log into the fields the expanded rail row renders.
+ * The part of an agent's activity that only its log can change.
  *
- * `now` is a parameter so the caller's clock signal drives re-rendering and so
- * this stays a pure function under test.
+ * Split out from the clock-dependent part because scanning an agent's entries
+ * is the expensive half and the clock ticks far more often than the log grows:
+ * folding both into one memo made every agent rescan its whole log on each tick,
+ * which is quadratic in a session with a large fleet.
  */
-export const subagentActivity = (agent: SubagentView, now: number): SubagentActivity => {
-	const newest = agent.entries.at(-1)
+export type SubagentScan = {
+	readonly newestTs: number | null
+	readonly runningTool: { readonly name: string; readonly summary: string; readonly since: number } | null
+	readonly lastOutput: string | null
+	readonly outcomeText: string | null
+}
+
+/** Scan one agent's log. Recompute only when its entries change. */
+export const subagentScan = (agent: SubagentView): SubagentScan => {
 	const finish = finishOf(agent.entries)
-	const running = agent.status === 'running' ? runningToolOf(agent.entries) : null
 	return {
-		status: agent.status,
-		turns: agent.turns,
-		tools: agent.tools,
-		ageMs: Math.max(0, now - agent.calledAt),
-		// Silence during a tool call is the tool working, not the agent stalling,
-		// so it is not reported as idle at all.
-		idleMs: running !== null || newest === undefined ? null : Math.max(0, now - newest.ts),
-		runningTool: running === null ? null : { name: running.name, summary: running.summary },
-		runningToolMs: running === null ? null : Math.max(0, now - running.since),
+		newestTs: agent.entries.at(-1)?.ts ?? null,
+		runningTool: agent.status === 'running' ? runningToolOf(agent.entries) : null,
 		lastOutput: lastToolOutput(agent.entries) ?? lastAssistantText(agent.entries),
 		outcomeText:
 			finish === undefined
@@ -187,6 +188,34 @@ export const subagentActivity = (agent: SubagentView, now: number): SubagentActi
 						: oneLine(finish.reason ?? finish.resultText ?? '') || null,
 	}
 }
+
+/**
+ * Combine a scan with the current time.
+ *
+ * Cheap enough to run on every clock tick: it does arithmetic, not scanning.
+ */
+export const activityFromScan = (agent: SubagentView, scan: SubagentScan, now: number): SubagentActivity => ({
+	status: agent.status,
+	turns: agent.turns,
+	tools: agent.tools,
+	ageMs: Math.max(0, now - agent.calledAt),
+	// Silence during a tool call is the tool working, not the agent stalling, so
+	// it is not reported as idle at all.
+	idleMs: scan.runningTool !== null || scan.newestTs === null ? null : Math.max(0, now - scan.newestTs),
+	runningTool: scan.runningTool === null ? null : { name: scan.runningTool.name, summary: scan.runningTool.summary },
+	runningToolMs: scan.runningTool === null ? null : Math.max(0, now - scan.runningTool.since),
+	lastOutput: scan.lastOutput,
+	outcomeText: scan.outcomeText,
+})
+
+/**
+ * Project one subagent's log into the fields the expanded rail row renders.
+ *
+ * `now` is a parameter so the caller's clock signal drives re-rendering and so
+ * this stays a pure function under test.
+ */
+export const subagentActivity = (agent: SubagentView, now: number): SubagentActivity =>
+	activityFromScan(agent, subagentScan(agent), now)
 
 /**
  * How many lines the expanded row occupies for a given activity.

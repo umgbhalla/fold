@@ -1,10 +1,16 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes } from '@opentui/core'
-import { createMemo, Show } from 'solid-js'
+import { createMemo, on, Show } from 'solid-js'
 
 import { agentTypeAccent } from './AccentPalette'
 import { clampCell, renderRow, type RowCell } from './RowLayout'
-import { expandedRowHeight, subagentActivity, type SubagentActivity } from './SubagentActivity'
+import {
+	activityFromScan,
+	expandedRowHeight,
+	subagentScan,
+	type SubagentActivity,
+	type SubagentScan,
+} from './SubagentActivity'
 import { relativeSubagentTime, type SubagentStatus, type SubagentView } from './Subagents'
 import { theme } from './ThemeState'
 
@@ -76,6 +82,9 @@ const shortDuration = (ms: number): string => {
  */
 const IDLE_ALERT_MS = 90_000
 
+/** What a collapsed row projects from: nothing, because it renders none of it. */
+const emptyScan: SubagentScan = { newestTs: null, runningTool: null, lastOutput: null, outcomeText: null }
+
 const typeAbbreviation = (type: string): string => {
 	const words = type.split(/[^a-z0-9]+/i).filter((word) => word.length > 0)
 	if (words.length === 0) return type.slice(0, 4)
@@ -141,7 +150,18 @@ export const SubagentRow = (props: {
 	readonly width: number
 	readonly onSelect: () => void
 }) => {
-	const activity = createMemo(() => subagentActivity(props.agent, props.now))
+	/**
+	 * The log scan runs only when this agent's entry count moves, and only while
+	 * the row is expanded. A collapsed row shows nothing that a scan produces, and
+	 * the clock ticking must not drag every agent's whole log through a rescan.
+	 */
+	const scan = createMemo(
+		on(
+			() => (props.selected ? props.agent.entries.length : -1),
+			() => (props.selected ? subagentScan(props.agent) : emptyScan),
+		),
+	)
+	const activity = createMemo(() => activityFromScan(props.agent, scan(), props.now))
 	const collapsed = createMemo(() =>
 		renderRow(collapsedRowCells(props.agent, props.now), Math.max(0, props.width - 2)),
 	)
