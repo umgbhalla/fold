@@ -106,7 +106,11 @@ terminalDescribe('TUI terminal behavior', () => {
 		expect(frame.text.split('\n').find((line) => line.includes('notes file.md'))).toContain('●')
 
 		await session.keyboard.type('j')
-		await session.screen.waitForText('notes file.md · SELECTED', { timeoutMs: 10_000 })
+		// The diff header is width-aware now, so the path is elided when the pane
+		// is narrow and only the state words are guaranteed intact. Waiting on the
+		// state rather than on a path plus state keeps the assertion about what the
+		// header is for.
+		await session.screen.waitForText('· SELECTED · UNTRACKED', { timeoutMs: 10_000 })
 		frame = await session.screen.capture({ settleMs: 100, deadlineMs: 5_000, allowIncomplete: true })
 		expect(frame.text.split('\n').find((line) => line.includes('notes file.md'))).toContain('✓')
 		await session.screen.waitForText('CHANGES · [SELECTED]', { timeoutMs: 10_000 })
@@ -128,14 +132,11 @@ terminalDescribe('TUI terminal behavior', () => {
 
 		await session.screen.waitForText('researcher', { timeoutMs: 10_000 })
 		await session.keyboard.type('ll')
-		// The rail opens on SUBAGENTS, the one tab with navigable rows, so META is
-		// one Tab away.
-		await session.keyboard.press('Tab')
-		await session.screen.waitForText('AGENT TYPES', { timeoutMs: 10_000 })
-		await session.screen.waitForText('TOOL CALLS', { timeoutMs: 10_000 })
-		const meta = await session.screen.capture({ settleMs: 100, deadlineMs: 5_000, allowIncomplete: true })
-		expect(meta.text).toContain('CTX')
-		expect(meta.text).toContain('COST')
+		// The scalars that used to fill a STATUS panel in this pane now sit in the
+		// header, where they are visible without entering the rail at all.
+		const header = await session.screen.capture({ settleMs: 100, deadlineMs: 5_000, allowIncomplete: true })
+		expect(header.text).toContain('turn')
+		expect(header.text).toContain('agent')
 		await session.keyboard.press('Control+C')
 		await session.screen.waitForText('target-interrupted', { timeoutMs: 10_000 })
 	}, 30_000)
@@ -150,7 +151,7 @@ terminalDescribe('TUI terminal behavior', () => {
 			env: { FOLD_TUI_OVERFLOW_SUBAGENTS_FIXTURE: '1' },
 		})
 
-		await session.screen.waitForText('META', { timeoutMs: 10_000 })
+		await session.screen.waitForText('SUBAGENTS', { timeoutMs: 10_000 })
 		await session.keyboard.type('ll')
 		// SUBAGENTS is already the open tab.
 		await session.screen.waitForText('SUBAGENTS · [SELECTED]', { timeoutMs: 10_000 })
@@ -176,8 +177,7 @@ terminalDescribe('TUI terminal behavior', () => {
 
 		await session.screen.waitForText('researcher', { timeoutMs: 10_000 })
 		await session.keyboard.type('ll')
-		// SUBAGENTS -> META -> SKILLS.
-		await session.keyboard.press('Tab')
+		// Two tabs now: SUBAGENTS -> SKILLS.
 		await session.keyboard.press('Tab')
 		await session.screen.waitForText('SKILLS · [SELECTED]', { timeoutMs: 10_000 })
 		await session.screen.waitForText('▸ effect-program-design', { timeoutMs: 10_000 })

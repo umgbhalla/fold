@@ -58,6 +58,29 @@ const keys = flag('keys', '')
 	.filter((value) => value.length > 0)
 
 const fixture = fixtures[fixtureName]
+
+/**
+ * Keys that have to be pressed rather than typed.
+ *
+ * `--keys d,enter` used to type the letters `e n t e r` into the app, which
+ * looks like it worked (the screen changes) while testing something else
+ * entirely. Named keys are pressed; anything else is typed as literal text.
+ */
+const namedKeys = new Set(['enter', 'escape', 'tab', 'backspace', 'up', 'down', 'left', 'right', 'space'])
+
+const sendKey = async (
+	session: { keyboard: { type: (text: string) => Promise<unknown>; press: (key: string) => Promise<unknown> } },
+	key: string,
+): Promise<void> => {
+	const lowered = key.toLowerCase()
+	if (!namedKeys.has(lowered)) {
+		await session.keyboard.type(key)
+		return
+	}
+	const pressed = lowered === 'escape' ? 'Escape' : lowered.charAt(0).toUpperCase() + lowered.slice(1)
+	await session.keyboard.press(pressed)
+}
+
 if (fixture === undefined) {
 	console.error(`unknown fixture ${fixtureName}; known: ${Object.keys(fixtures).join(', ')}`)
 	process.exit(1)
@@ -78,7 +101,7 @@ try {
 		// frame or two, so a capture taken too early shows columns mid-collapse.
 		await new Promise((resolve) => setTimeout(resolve, settleMs))
 		for (const key of keys) {
-			await session.keyboard.type(key === 'tab' ? '\t' : key)
+			await sendKey(session, key)
 			await new Promise((resolve) => setTimeout(resolve, 250))
 		}
 		const frame = await session.screen.capture({ settleMs: 150, deadlineMs: 5_000, allowIncomplete: true })

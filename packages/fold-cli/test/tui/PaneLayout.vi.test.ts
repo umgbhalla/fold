@@ -85,3 +85,59 @@ describe('paneWidths', () => {
 		expect(paneWidths(80, 0).events).toBeGreaterThanOrEqual(24)
 	})
 })
+
+describe('focus', () => {
+	it('gives the focused pane more room than it has unfocused', () => {
+		for (const focused of ['events', 'context', 'rail'] as const) {
+			const idle = paneWidths(160, 3)
+			const active = paneWidths(160, 3, focused)
+			expect(active[focused], `${focused} focused`).toBeGreaterThan(idle[focused])
+		}
+	})
+
+	it('takes those columns from the panes you are not in', () => {
+		const idle = paneWidths(160, 3)
+		const active = paneWidths(160, 3, 'context')
+		expect(active.events).toBeLessThan(idle.events)
+		expect(active.rail).toBeLessThan(idle.rail)
+	})
+
+	/** The row is the terminal; growing one pane may never overrun it. */
+	it('still spends exactly the terminal width', () => {
+		for (const width of widths) {
+			for (const agents of [0, 1, 15]) {
+				for (const focused of [null, 'events', 'context', 'rail'] as const) {
+					const panes = paneWidths(width, agents, focused)
+					expect(panes.events + panes.context + panes.rail, `${width}/${agents}/${focused}`).toBe(width)
+				}
+			}
+		}
+	})
+
+	it('leaves the panes you are not in readable', () => {
+		for (const width of [110, 140, 160, 200]) {
+			for (const focused of ['events', 'context', 'rail'] as const) {
+				const panes = paneWidths(width, 3, focused)
+				expect(panes.events, `${width} events`).toBeGreaterThanOrEqual(20)
+				expect(panes.context, `${width} context`).toBeGreaterThanOrEqual(24)
+				expect(panes.rail, `${width} rail`).toBeGreaterThanOrEqual(24)
+			}
+		}
+	})
+
+	/** A rail that is not on screen has nothing to lend and nothing to claim. */
+	it('changes nothing when the focused pane is not rendered', () => {
+		expect(paneWidths(160, 0, 'rail')).toEqual(paneWidths(160, 0))
+		expect(paneWidths(100, 15, 'rail')).toEqual(paneWidths(100, 15))
+	})
+
+	it('does not let a collapsed rail lend columns it does not have', () => {
+		const panes = paneWidths(100, 0, 'context')
+		expect(panes.rail).toBe(0)
+		expect(panes.events + panes.context).toBe(100)
+	})
+
+	it('is stable: focusing the same pane twice gives the same layout', () => {
+		expect(paneWidths(160, 3, 'context')).toEqual(paneWidths(160, 3, 'context'))
+	})
+})

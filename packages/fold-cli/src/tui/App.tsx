@@ -14,7 +14,6 @@ import { CommandPalette, type TuiCommand } from './CommandPalette'
 import { nextRootInputVerb, normalizeRootInputVerb, rootInputVerbLabel, type RootInputVerb } from './Converse'
 import { EventDetail, EventIndexRow, EventRow, rowVisual } from './EventViews'
 import type { GitChange, GitChangeGroup, GitSnapshot } from './GitChanges'
-import { MetaRail } from './MetaRail'
 import { ModelSelectionModal, type ModelSelectionRequest } from './ModelSelectionModal'
 import {
 	contextMode,
@@ -29,7 +28,9 @@ import {
 } from './Navigation'
 import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
-import { paneWidths, railInnerWidth } from './PaneLayout'
+import { paneWidths, railInnerWidth, type FocusedPane } from './PaneLayout'
+import { renderRow, type RowCell } from './RowLayout'
+import { sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
 import {
 	conversationRows,
 	durableConversationRows,
@@ -106,10 +107,9 @@ export const TuiApp = (props: TuiAppProps) => {
 	const [paletteOpen, setPaletteOpen] = createSignal(false)
 	const [newSessionOpen, setNewSessionOpen] = createSignal(false)
 	const [modelsOpen, setModelsOpen] = createSignal(false)
-	// The rail opens on the one tab you can actually drive. META has no
-	// navigable rows, so defaulting to it meant J/K did nothing in the rail until
-	// you knew to press Tab.
-	const [railTab, setRailTab] = createSignal<'subagents' | 'meta' | 'skills'>('subagents')
+	// Both rail tabs are navigable, so J/K always does something. META is gone:
+	// its scalars are in the header and its histograms are the tally line.
+	const [railTab, setRailTab] = createSignal<'subagents' | 'skills'>('subagents')
 	const [leftTab, setLeftTab] = createSignal<'events' | 'changes'>('events')
 	const [selectedChange, setSelectedChange] = createSignal(0)
 	const [expandedChanges, setExpandedChanges] = createSignal<ReadonlySet<string>>(new Set())
@@ -214,7 +214,7 @@ export const TuiApp = (props: TuiAppProps) => {
 	const skillTargetAgent = createMemo(() => selectedAgent())
 	const skills = createMemo(() => skillViews(props.state().allEntries, skillTargetAgent()?.agentId ?? rootAgentId()))
 	const nextRailTab = (): void => {
-		setRailTab((current) => (current === 'subagents' ? 'meta' : current === 'meta' ? 'skills' : 'subagents'))
+		setRailTab((current) => (current === 'subagents' ? 'skills' : 'subagents'))
 	}
 	const rowKeys = createMemo(() => rows().map((row) => row.key))
 	const mode = createMemo(() => contextMode(navigation(), rowKeys()))
@@ -267,10 +267,46 @@ export const TuiApp = (props: TuiAppProps) => {
 		const selected = selectedRow()
 		return mode() === 'inspect' && selected !== undefined ? [selected] : rows()
 	})
-	const panes = createMemo(() => paneWidths(dimensions().width, agents().length))
+	/**
+	 * The pane the user is in, in layout terms. Navigation calls the rail
+	 * `subagents`; the layout calls its slot `rail`.
+	 */
+	const focusedPane = createMemo<FocusedPane>(() => {
+		switch (navigation().pane) {
+			case 'events':
+				return 'events'
+			case 'context':
+				return 'context'
+			case 'subagents':
+				return 'rail'
+		}
+	})
+	const panes = createMemo(() => paneWidths(dimensions().width, agents().length, focusedPane()))
+	/**
+	 * The fleet tally in the rail's tab bar: running, done, failed. This was the
+	 * RUN row of the STATUS panel, which is worth a slot in a bar that is already
+	 * there but not a bordered panel of its own.
+	 */
+	const railRunLabel = createMemo(() => {
+		const { running, done, errors } = meta()
+		const parts = [running > 0 ? `● ${running}` : '', done > 0 ? `◆ ${done}` : '', errors > 0 ? `✕ ${errors}` : '']
+		const label = parts.filter((part) => part !== '').join(' ')
+		return label === '' ? '' : label
+	})
+	const scalarsLine = createMemo(() =>
+		sessionScalarsLine({
+			contextTokens: meta().contextTokens,
+			contextPercent: meta().contextPercent,
+			costUsd: meta().costUsd,
+			turns: meta().turns,
+			agents: meta().agents,
+		}),
+	)
 	const eventPaneWidth = createMemo(() => panes().events)
 	const railPaneWidth = createMemo(() => panes().rail)
 	const railInner = createMemo(() => railInnerWidth(panes().rail))
+	// The tally box is indented one column, so it renders into one less than the pane's inner width.
+	const toolTally = createMemo(() => toolTallyLine(meta().toolCalls, toolGlyph, Math.max(0, railInner() - 1)))
 	const contextPaneWidth = createMemo(() => panes().context)
 	/**
 	 * The panes actually on screen, left to right, so `h`/`l` cannot walk into the
@@ -462,7 +498,6 @@ export const TuiApp = (props: TuiAppProps) => {
 			setSelectedSkill((current) => Math.max(0, Math.min(skills().length - 1, current + delta)))
 			return
 		}
-		if (railTab() === 'meta') return
 		const available = agents()
 		if (available.length === 0) return
 		const current = available.findIndex((agent) => agent.agentId === selectedAgentId())
@@ -488,7 +523,6 @@ export const TuiApp = (props: TuiAppProps) => {
 			setSelectedSkill(target === 'first' ? 0 : Math.max(0, skills().length - 1))
 			return
 		}
-		if (railTab() === 'meta') return
 		const available = agents()
 		const agent = target === 'first' ? available[0] : available.at(-1)
 		if (agent !== undefined) setSelectedAgentId(agent.agentId)
@@ -784,9 +818,12 @@ export const TuiApp = (props: TuiAppProps) => {
 
 	return (
 		<box flexDirection="column" width="100%" height="100%" backgroundColor={tactical.color.void}>
+			{/* Six lines, not five: the right column now carries session state, the
+			    model line, and the session's scalars, which used to be a bordered
+			    panel inside the rail. */}
 			<box
 				flexDirection="row"
-				height={5}
+				height={6}
 				paddingX={1}
 				gap={3}
 				alignItems="center"
@@ -800,7 +837,7 @@ export const TuiApp = (props: TuiAppProps) => {
 						{props.cwd}
 					</text>
 				</box>
-				<box flexDirection="column" alignItems="flex-end" justifyContent="center">
+				<box flexDirection="column" alignItems="flex-end" justifyContent="center" flexShrink={0}>
 					<box flexDirection="row" gap={1}>
 						<text fg={tactical.color.textFaint} wrapMode="none">
 							SESSION
@@ -811,6 +848,13 @@ export const TuiApp = (props: TuiAppProps) => {
 						<span style={{ fg: tactical.color.textFaint }}>{`${props.mode} · ${props.profile} · `}</span>
 						<span style={{ fg: tactical.color.text }}>{props.state().model}</span>
 						<span style={{ fg: tactical.color.textFaint }}>{reasoningLabel()}</span>
+					</text>
+					{/* The scalars that used to fill a bordered STATUS panel in the
+					    rail: glanceable, not navigable. The header row is a fixed
+					    five lines and its right column already used them, so this
+					    shares the model line's row rather than adding one. */}
+					<text fg={tactical.color.textFaint} wrapMode="none">
+						{scalarsLine()}
 					</text>
 				</box>
 			</box>
@@ -1100,7 +1144,44 @@ export const TuiApp = (props: TuiAppProps) => {
 														attributes={TextAttributes.BOLD}
 														wrapMode="none"
 													>
-														{`-- ${change.path}${currentChange()?.key === change.key ? ' · SELECTED' : ''} · ${change.group.toUpperCase()}${expandedChanges().has(change.key) ? ' · FULL FILE' : ''} --`}
+														{/* The path yields before the state words. A fixed
+														    string truncated from the right, which is what this
+														    was, drops FULL FILE first, so the pane stopped
+														    saying whether the diff was expanded exactly when
+														    the pane got narrow. */}
+														{renderRow(
+															(
+																[
+																	{ text: '--', weight: 'required' },
+																	{
+																		text: change.path,
+																		weight: 'subject',
+																		minWidth: 8,
+																	},
+																	{
+																		text:
+																			currentChange()?.key === change.key
+																				? '· SELECTED'
+																				: '',
+																		weight: 'optional',
+																		priority: 2,
+																	},
+																	{
+																		text: `· ${change.group.toUpperCase()}`,
+																		weight: 'optional',
+																		priority: 1,
+																	},
+																	{
+																		text: expandedChanges().has(change.key)
+																			? '· FULL FILE'
+																			: '',
+																		weight: 'optional',
+																		priority: 3,
+																	},
+																] satisfies ReadonlyArray<RowCell>
+															).filter((cell) => cell.text !== ''),
+															Math.max(0, contextPaneWidth() - 6),
+														)}
 													</text>
 													<diff
 														diff={displayedDiff()}
@@ -1234,6 +1315,9 @@ export const TuiApp = (props: TuiAppProps) => {
 						titleColor={paneTitleColor('subagents')}
 						backgroundColor={tactical.color.panel}
 					>
+						{/* Two tabs, not three: META's readouts are scalars, which now
+						    live in the header, and its histograms are the tally line at
+						    the foot of this pane. */}
 						<box height={1} flexDirection="row" gap={2} paddingLeft={1}>
 							<text
 								fg={railTab() === 'subagents' ? tactical.color.coreBright : tactical.color.textDim}
@@ -1242,34 +1326,26 @@ export const TuiApp = (props: TuiAppProps) => {
 								SUBAGENTS
 							</text>
 							<text
-								fg={railTab() === 'meta' ? tactical.color.coreBright : tactical.color.textDim}
-								onMouseDown={() => setRailTab('meta')}
-							>
-								META
-							</text>
-							<text
 								fg={railTab() === 'skills' ? tactical.color.coreBright : tactical.color.textDim}
 								onMouseDown={() => setRailTab('skills')}
 							>
 								SKILLS
 							</text>
 							<box flexGrow={1} />
-							<text fg={tactical.color.grid}>{meta().running} RUN</text>
+							<text fg={tactical.color.grid} wrapMode="none">
+								{railRunLabel()}
+							</text>
 						</box>
 						<Show
 							when={railTab() === 'subagents'}
 							fallback={
-								railTab() === 'meta' ? (
-									<MetaRail meta={meta()} />
-								) : (
-									<SkillsRail
-										skills={skills()}
-										selected={selectedSkill()}
-										active={navigation().pane === 'subagents'}
-										width={railInner()}
-										onSelect={setSelectedSkill}
-									/>
-								)
+								<SkillsRail
+									skills={skills()}
+									selected={selectedSkill()}
+									active={navigation().pane === 'subagents'}
+									width={railInner()}
+									onSelect={setSelectedSkill}
+								/>
 							}
 						>
 							<scrollbox
@@ -1293,6 +1369,16 @@ export const TuiApp = (props: TuiAppProps) => {
 									)}
 								</Index>
 							</scrollbox>
+						</Show>
+						{/* What the session's tools actually were, in one line: the panel
+						    of bars this replaces spent a third of the rail's height to say
+						    the same thing. */}
+						<Show when={toolTally() !== ''}>
+							<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
+								<text fg={tactical.color.textDim} wrapMode="none">
+									{toolTally()}
+								</text>
+							</box>
 						</Show>
 					</box>
 				</Show>
