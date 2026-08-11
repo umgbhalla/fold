@@ -3,15 +3,10 @@ import { TextAttributes } from '@opentui/core'
 import { createMemo, on, Show } from 'solid-js'
 
 import { agentTypeAccent } from './AccentPalette'
-import { clampCell, renderRow, type RowCell } from './RowLayout'
-import {
-	activityFromScan,
-	expandedRowHeight,
-	subagentScan,
-	type SubagentActivity,
-	type SubagentScan,
-} from './SubagentActivity'
-import { relativeSubagentTime, type SubagentStatus, type SubagentView } from './Subagents'
+import { clampCell, renderRow } from './RowLayout'
+import { activityFromScan, expandedRowHeight, subagentScan, type SubagentScan } from './SubagentActivity'
+import { collapsedRowCells, expandedStatsLine, IDLE_ALERT_MS } from './SubagentRowText'
+import type { SubagentStatus, SubagentView } from './Subagents'
 import { theme } from './ThemeState'
 
 /**
@@ -24,27 +19,6 @@ import { theme } from './ThemeState'
  * spends its extra lines on what you selected it to find out: what it is
  * running, how long it has been silent, and how it ended.
  */
-
-/**
- * Status is a glyph, not a word.
- *
- * `RUNNING` next to a spinner spends twelve columns restating the spinner, and
- * those were the twelve columns that pushed the description off the row.
- */
-const statusGlyph = (status: SubagentStatus): string => {
-	switch (status) {
-		case 'running':
-			return '◐'
-		case 'done':
-			return '◆'
-		case 'error':
-			return '✕'
-		case 'interrupted':
-			return '⊘'
-		case 'stopped':
-			return '■'
-	}
-}
 
 const statusColor = (status: SubagentStatus): string => {
 	switch (status) {
@@ -61,73 +35,8 @@ const statusColor = (status: SubagentStatus): string => {
 	}
 }
 
-/** A compact duration for the row's tail: `4m`, `2h`, `now`. */
-const shortDuration = (ms: number): string => {
-	const seconds = Math.floor(ms / 1_000)
-	if (seconds < 60) return `${seconds}s`
-	const minutes = Math.floor(seconds / 60)
-	if (minutes < 60) return `${minutes}m`
-	const hours = Math.floor(minutes / 60)
-	if (hours < 24) return `${hours}h`
-	return `${Math.floor(hours / 24)}d`
-}
-
-/**
- * An agent that has been silent this long, with no tool out running to explain
- * it, is worth a second look.
- *
- * The threshold is deliberately generous: a model can take a while to produce
- * its next turn, and crying wolf at thirty seconds would train the reader to
- * ignore the colour.
- */
-const IDLE_ALERT_MS = 90_000
-
 /** What a collapsed row projects from: nothing, because it renders none of it. */
 const emptyScan: SubagentScan = { newestTs: null, runningTool: null, lastOutput: null, outcomeText: null }
-
-const typeAbbreviation = (type: string): string => {
-	const words = type.split(/[^a-z0-9]+/i).filter((word) => word.length > 0)
-	if (words.length === 0) return type.slice(0, 4)
-	if (words.length === 1) return (words[0] ?? '').slice(0, 4)
-	return words
-		.map((word) => word[0] ?? '')
-		.join('')
-		.slice(0, 4)
-}
-
-/** The collapsed line, as cells so the decoration yields before the description. */
-export const collapsedRowCells = (agent: SubagentView, now: number): ReadonlyArray<RowCell> => [
-	{ text: statusGlyph(agent.status), weight: 'required' },
-	{ text: agent.description, weight: 'subject', minWidth: 6 },
-	{ text: typeAbbreviation(agent.type), weight: 'optional', priority: 0 },
-	{ text: relativeSubagentTime(agent.calledAt, now), weight: 'optional', priority: 1 },
-]
-
-/**
- * The line under an expanded row: how much work it has done, and either how long
- * its tool has been running or how long it has been quiet.
- *
- * A running tool is reported as its own elapsed time rather than as idleness,
- * because a subagent emits nothing at all while a tool is out, and calling that
- * idle would flag every slow-but-healthy agent.
- */
-export const expandedStatsLine = (activity: SubagentActivity, type: string, width: number): string => {
-	const timing =
-		activity.runningToolMs !== null
-			? `running ${shortDuration(activity.runningToolMs)}`
-			: activity.idleMs !== null && activity.status === 'running'
-				? `idle ${shortDuration(activity.idleMs)}`
-				: shortDuration(activity.ageMs)
-	return renderRow(
-		[
-			{ text: typeAbbreviation(type), weight: 'optional', priority: 0 },
-			{ text: `${activity.turns}t`, weight: 'optional', priority: 2 },
-			{ text: `${activity.tools}⚒`, weight: 'optional', priority: 3 },
-			{ text: timing, weight: 'subject', minWidth: 3 },
-		],
-		width,
-	)
-}
 
 const SubagentDetailLine = (props: {
 	readonly glyph: string

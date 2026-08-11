@@ -166,16 +166,30 @@ What was built, and where it is verified.
   not claim to be running one. Split into `subagentScan` (log) and
   `activityFromScan` (clock) so a tick does not rescan every log.
 - `PaneLayout.ts` — character widths, not percentages. Rail is 44 columns at
-  ≥140, 30 at 110-139, absent below 110, and absent with no subagents.
+  ≥140, 30 at 110-139, absent below 110, and absent with no subagents. The
+  focused pane then takes a fifth of each neighbour, so moving into a pane moves
+  the layout rather than relabelling a border; floors keep the panes you are not
+  in readable, and the three always sum to exactly the terminal.
+- `SessionScalars.ts` — the header's scalar line and the rail's tool tally. A
+  scalar with nothing to say is omitted, not rendered as an em dash, because a
+  placeholder reads as a value at a glance.
+- `SubagentRowText.ts` — the row's text, apart from the component that draws it,
+  so which glyph a status gets and what survives at 26 columns are pinned by
+  tests rather than only by captured frames.
 - `Navigation.ts` — `movePane` walks only the panes on screen; `reconcilePane`
   recovers when the rail vanishes under the cursor.
 
 **Rail.** One line per subagent; the selected row expands in place to show
 turns, tools, whether a tool is running and for how long, and the result or
 failure reason. Fourteen agents plus one expansion fit in seventeen rows where
-the old rail needed twenty-eight for less. The rail opens on SUBAGENTS, the only
-tab with navigable rows. Bars are share-of-total, so a single-item series no
-longer draws full.
+the old rail needed twenty-eight for less.
+
+**META is gone.** Its four scalars are one line in the header, its histograms
+are one tally line at the foot of the rail, and `MetaRail.tsx` is deleted. The
+rail is two tabs, both navigable, so J/K always does something. The bars are
+gone with the panel; while they existed they were corrected to share-of-total,
+because normalising against the largest member drew a full bar for any
+single-item series.
 
 **Correctness fixes found by driving it.** Invalid branded ids crashed the app
 on any empty-log render and killed every fixture. A working subagent was
@@ -186,3 +200,9 @@ would leave the session when it would only deselect an agent.
 **Feedback loop.** `bun run tui:sheet` renders a named fixture state at several
 widths in one pass. `bun run test:tui` was 5 of 13 and is now 13 of 13; it had
 been fully red because the fixtures crashed before first paint.
+
+Two of the bugs above were found only by driving the shipped binary against a
+real recorded session, and one was in the tooling itself: `tui:sheet` typed key
+names as literal text, so `--keys d,enter` typed `e n t e r` and made working
+behaviour look broken. A tool that lies about what it pressed is worse than no
+tool, so named keys are pressed now.
