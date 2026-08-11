@@ -19,7 +19,10 @@ describe('metaDensity', () => {
 	 */
 	it('stays on one line when the terminal is too short to contain the block', () => {
 		expect(metaDensity(66, 14, true)).toBe('line')
+		// The boundary, checked against rendered output: 24 collapses, 26 expands,
+		// and at 26 the rail still shows 7 of 15 agents beside the metadata.
 		expect(metaDensity(66, 24, true)).toBe('line')
+		expect(metaDensity(66, 25, true)).toBe('line')
 		expect(metaDensity(66, 26, true)).toBe('expanded')
 	})
 })

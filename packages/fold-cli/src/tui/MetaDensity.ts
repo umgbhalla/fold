@@ -26,6 +26,11 @@ export type MetaDensity = 'line' | 'expanded'
  * into the status bar ("TOOL CALLS" appeared inside the frame edge). The block
  * can be up to 13 rows on its own (two headers, five agent types, six tools),
  * so the pane needs that plus room to still be a subagent list.
+ *
+ * Measured at the boundary rather than reasoned about: 24 rows stays collapsed,
+ * 26 expands, and nothing bleeds past the border at any size. At 26 the rail
+ * still lists 7 of 15 agents beside the metadata (14 at 44 rows), so the block
+ * summarises the list rather than replacing it.
  */
 export const metaDensity = (width: number, height: number, focused: boolean): MetaDensity =>
 	focused && width >= 40 && height >= 26 ? 'expanded' : 'line'
