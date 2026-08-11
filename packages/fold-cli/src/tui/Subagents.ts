@@ -28,35 +28,60 @@ const text = (value: unknown): string | undefined => (typeof value === 'string' 
 const field = (value: unknown, name: string): unknown =>
 	typeof value === 'object' && value !== null ? Reflect.get(value, name) : undefined
 
-const dispatchDetails = (entries: ReadonlyArray<LogEntry>, toolCallId: string | null) => {
-	if (toolCallId === null) return undefined
+/**
+ * One pass over the log, grouped by agent.
+ *
+ * Filtering the whole log once per agent is quadratic, and a session is exactly
+ * the case where both halves grow together: at 7320 entries and fifteen agents
+ * that measured 3.8 ms per rebuild against 0.13 ms at 330. Grouping first makes
+ * the cost linear in the log.
+ */
+const entriesByAgent = (entries: ReadonlyArray<LogEntry>): ReadonlyMap<string, ReadonlyArray<LogEntry>> => {
+	const grouped = new Map<string, Array<LogEntry>>()
+	for (const entry of entries) {
+		// Session-level entries carry no agent and belong to no subagent.
+		if (entry.agentId === null) continue
+		const existing = grouped.get(entry.agentId)
+		if (existing === undefined) grouped.set(entry.agentId, [entry])
+		else existing.push(entry)
+	}
+	return grouped
+}
+
+/** The dispatch details for every subagent tool call, indexed by tool-call id. */
+const dispatchDetailsByToolCall = (
+	entries: ReadonlyArray<LogEntry>,
+): ReadonlyMap<string, { readonly description: string; readonly prompt: string }> => {
+	const details = new Map<string, { readonly description: string; readonly prompt: string }>()
 	for (const entry of entries) {
 		if (entry._tag !== 'assistant-message' || typeof entry.message.content === 'string') continue
 		for (const part of entry.message.content) {
-			if (part.type !== 'tool-call' || part.id !== toolCallId || part.name !== 'subagent') continue
+			if (part.type !== 'tool-call' || part.name !== 'subagent') continue
 			const prompt = text(field(part.params, 'prompt')) ?? ''
-			return {
+			details.set(String(part.id), {
 				description: text(field(part.params, 'description')) ?? prompt.replace(/\s+/g, ' ').trim().slice(0, 60),
 				prompt,
-			}
+			})
 		}
 	}
-	return undefined
+	return details
 }
 
 export const subagentViews = (entries: ReadonlyArray<LogEntry>, rootAgentId: AgentId): ReadonlyArray<SubagentView> => {
 	const starts = entries.filter(
 		(entry): entry is AgentStartedLogEntry => entry._tag === 'agent_started' && entry.agentId !== rootAgentId,
 	)
+	const grouped = entriesByAgent(entries)
+	const dispatches = dispatchDetailsByToolCall(entries)
 	return starts
 		.toSorted((left, right) => left.seq - right.seq)
 		.map((start) => {
-			const own = entries.filter((entry) => entry.agentId === start.agentId)
+			const own = grouped.get(start.agentId) ?? []
 			const finish = own.filter((entry) => entry._tag === 'agent-finished').at(-1)
 			const continuing = own.some(
 				(entry) => entry._tag === 'user-message' && (finish === undefined || entry.seq > finish.seq),
 			)
-			const details = dispatchDetails(entries, start.toolCallId)
+			const details = start.toolCallId === null ? undefined : dispatches.get(String(start.toolCallId))
 			return {
 				agentId: start.agentId,
 				calledAt: start.ts,

@@ -1,4 +1,4 @@
-import { AgentId, type AgentStartedLogEntry, type LogEntry, MessageId } from '@humanlayer/fold-core'
+import { AgentId, StateId, type AgentStartedLogEntry, type LogEntry, MessageId } from '@humanlayer/fold-core'
 import { describe, expect, it } from 'vitest'
 
 import { relativeSubagentTime, skillViews, subagentViews } from '../src/tui/Subagents'
@@ -35,6 +35,76 @@ describe('subagentViews', () => {
 
 		expect(views.map((view) => view.agentId)).toEqual([earlier.agentId, later.agentId])
 		expect(views.map((view) => view.calledAt)).toEqual([1_000, 2_000])
+	})
+})
+
+describe('subagentViews cost', () => {
+	/**
+	 * One `agent_started` per agent, then ordinary traffic attributed to it. The
+	 * traffic is what the projection used to rescan once per agent.
+	 */
+	const logWith = (agents: number, perAgent: number): ReadonlyArray<LogEntry> => {
+		const entries: Array<LogEntry> = []
+		let seq = 0
+		for (let a = 0; a < agents; a += 1) {
+			const agentId = AgentId.make(`agent_${String(a).padStart(24, 'a')}`)
+			entries.push(startedEntry(agentId, seq, seq))
+			seq += 1
+			for (let n = 0; n < perAgent; n += 1) {
+				const traffic: LogEntry = {
+					_tag: 'tool_state',
+					seq,
+					ts: seq,
+					agentId,
+					parentAgentId: null,
+					toolCallId: null,
+					namespace: 'bench',
+					stateId: StateId.make(`state_${String(seq).padStart(24, 'a')}`),
+					key: 'k',
+					value: seq,
+				}
+				entries.push(traffic)
+				seq += 1
+			}
+		}
+		return entries
+	}
+
+	/**
+	 * The projection filtered the whole log once per agent, so a session where
+	 * both the log and the fleet grow paid for it twice over: 3.8 ms per rebuild
+	 * at 7320 entries against 0.13 ms at 330, which is what made live rendering
+	 * choppy.
+	 *
+	 * Counting entry visits rather than timing it: a wall-clock ratio is noisy
+	 * enough on a loaded machine that the quadratic version still passed a
+	 * generous bound, so the check has to be structural to mean anything. With
+	 * grouping, each entry is visited a fixed number of times whatever the fleet
+	 * size; without it, visits scale with the number of agents.
+	 */
+	it('visits each entry a bounded number of times, whatever the fleet size', () => {
+		const root = AgentId.make('agent_rrrrrrrrrrrrrrrrrrrrrrrr')
+		const visitsFor = (agents: number): number => {
+			const entries = logWith(agents, 10)
+			let visits = 0
+			const counted: ReadonlyArray<LogEntry> = entries.map((entry) => {
+				const proxy: LogEntry = { ...entry }
+				Object.defineProperty(proxy, 'agentId', {
+					get: () => {
+						visits += 1
+						return entry.agentId
+					},
+				})
+				return proxy
+			})
+			subagentViews(counted, root)
+			return visits / entries.length
+		}
+
+		const few = visitsFor(2)
+		const many = visitsFor(40)
+		// Twenty times the agents must not mean twenty times the visits per entry.
+		expect(many / few, `visits per entry went ${few.toFixed(1)} -> ${many.toFixed(1)}`).toBeLessThan(2)
 	})
 })
 

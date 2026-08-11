@@ -34,6 +34,7 @@ import { sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
 import {
 	conversationRows,
 	durableConversationRows,
+	allEntriesSignature,
 	durableRowsSignature,
 	makeSessionStateFromEntries,
 	replayIsReady,
@@ -195,7 +196,20 @@ export const TuiApp = (props: TuiAppProps) => {
 			placeholderRootAgentId
 		)
 	})
-	const agents = createMemo(() => subagentViews(props.state().allEntries, rootAgentId()))
+	/**
+	 * Whole-log projections, rebuilt when the log grows rather than on every
+	 * streaming token. `allEntries` is reconciled in place, so a delta batch
+	 * leaves its identity changed but its content the same; keying on the
+	 * signature is what stops a token from rescanning every entry for the rail,
+	 * the header scalars and the tool tally at once.
+	 */
+	const logSignature = createMemo(() => allEntriesSignature(props.state()))
+	const agents = createMemo(
+		on(
+			() => [logSignature(), rootAgentId()] as const,
+			() => subagentViews(props.state().allEntries, rootAgentId()),
+		),
+	)
 	const selectedAgent = createMemo(() => agents().find((agent) => agent.agentId === selectedAgentId()))
 	const catalogEntry = createMemo(() => {
 		const modelId = props.state().model
@@ -203,12 +217,16 @@ export const TuiApp = (props: TuiAppProps) => {
 		if (catalog === undefined || modelId === 'unresolved') return null
 		return catalog.find((entry) => entry.modelId === modelId) ?? null
 	})
-	const meta = createMemo(() =>
-		metaCounts(
-			props.state().allEntries,
-			agents(),
-			catalogEntry()?.pricing ?? null,
-			catalogEntry()?.contextWindow ?? defaultContextWindowFor(props.state().model),
+	const meta = createMemo(
+		on(
+			() => [logSignature(), agents(), catalogEntry(), props.state().model] as const,
+			() =>
+				metaCounts(
+					props.state().allEntries,
+					agents(),
+					catalogEntry()?.pricing ?? null,
+					catalogEntry()?.contextWindow ?? defaultContextWindowFor(props.state().model),
+				),
 		),
 	)
 	const skillTargetAgent = createMemo(() => selectedAgent())

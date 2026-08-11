@@ -533,6 +533,20 @@ export const durableRowsSignature = (state: SessionState): string =>
 	`${state.rootContent.length}|${state.rootContent[state.rootContent.length - 1]?.seq ?? -1}|${state.interruptedAssistantSeqs.length}`
 
 /**
+ * A cache key for anything derived from the whole log rather than the rendered
+ * transcript.
+ *
+ * `allEntries` is written with `reconcile`, which patches arrays in place, so
+ * object identity is not a safe key: a memo over it would either never
+ * invalidate or, read naively, recompute on every 16 ms token batch. The log is
+ * append-only and its newest seq moves whenever an entry lands, so length plus
+ * that seq changes exactly when a whole-log projection can change, and a
+ * streaming delta moves neither.
+ */
+export const allEntriesSignature = (state: SessionState): string =>
+	`${state.allEntries.length}|${state.allEntries[state.allEntries.length - 1]?.seq ?? -1}`
+
+/**
  * The settled part of the transcript. Pure: the caller memoises it against
  * {@link durableRowsSignature} so a token delta never rebuilds it.
  */
