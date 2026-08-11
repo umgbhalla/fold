@@ -189,13 +189,20 @@ export const TuiApp = (props: TuiAppProps) => {
 		const change = changes()[next]
 		if (change !== undefined) props.onViewChange?.(change)
 	}
-	const rootAgentId = createMemo(() => {
-		return (
-			props.state().allEntries.find((entry) => entry._tag === 'session_started')?.rootAgentId ??
-			props.state().allEntries[0]?.agentId ??
-			placeholderRootAgentId
-		)
-	})
+	const logSignature = createMemo(() => allEntriesSignature(props.state()))
+	/**
+	 * Gated like the projections below: a session with no `session_started`
+	 * entry falls through to a full scan, and that would run per token.
+	 */
+	const rootAgentId = createMemo(
+		on(logSignature, () => {
+			return (
+				props.state().allEntries.find((entry) => entry._tag === 'session_started')?.rootAgentId ??
+				props.state().allEntries[0]?.agentId ??
+				placeholderRootAgentId
+			)
+		}),
+	)
 	/**
 	 * Whole-log projections, rebuilt when the log grows rather than on every
 	 * streaming token. `allEntries` is reconciled in place, so a delta batch
@@ -203,7 +210,6 @@ export const TuiApp = (props: TuiAppProps) => {
 	 * signature is what stops a token from rescanning every entry for the rail,
 	 * the header scalars and the tool tally at once.
 	 */
-	const logSignature = createMemo(() => allEntriesSignature(props.state()))
 	const agents = createMemo(
 		on(
 			() => [logSignature(), rootAgentId()] as const,
@@ -230,7 +236,12 @@ export const TuiApp = (props: TuiAppProps) => {
 		),
 	)
 	const skillTargetAgent = createMemo(() => selectedAgent())
-	const skills = createMemo(() => skillViews(props.state().allEntries, skillTargetAgent()?.agentId ?? rootAgentId()))
+	const skills = createMemo(
+		on(
+			() => [logSignature(), skillTargetAgent()?.agentId ?? rootAgentId()] as const,
+			([, agentId]) => skillViews(props.state().allEntries, agentId),
+		),
+	)
 	const nextRailTab = (): void => {
 		setRailTab((current) => (current === 'subagents' ? 'skills' : 'subagents'))
 	}
