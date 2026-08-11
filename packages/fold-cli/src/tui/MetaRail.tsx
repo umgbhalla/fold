@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createEffect, createSignal, Index, onCleanup, type JSX } from 'solid-js'
+import { Index, type JSX } from 'solid-js'
 
 import { accent, accentPalette, accentTrack, agentTypeAccent } from './AccentPalette'
 import type { metaCounts } from './Subagents'
@@ -69,63 +69,34 @@ const Bar = (props: { readonly value: number; readonly max: number; readonly col
 	)
 }
 
+/**
+ * One row of a tally: glyph, label, share bar, count.
+ *
+ * The count used to be tweened over eight frames on a 35 ms interval, one timer
+ * per row, so a busy session woke the renderer dozens of times a second to
+ * animate an integer that had gone up by one. A count is not a quantity you
+ * watch move; it is a number you read.
+ */
 const MetricRow = (props: {
 	readonly glyph?: string
 	readonly label: string
 	readonly count: number
 	readonly max: number
 	readonly color: string
-}) => {
-	const [displayedCount, setDisplayedCount] = createSignal(props.count)
-	const [displayedMax, setDisplayedMax] = createSignal(props.max)
-	let previousCount = props.count
-	let previousMax = props.max
-	let timer: ReturnType<typeof setInterval> | undefined
-
-	createEffect(() => {
-		const targetCount = props.count
-		const targetMax = props.max
-		if (targetCount === previousCount && targetMax === previousMax) return
-		if (timer !== undefined) clearInterval(timer)
-
-		const startCount = displayedCount()
-		const startMax = displayedMax()
-		const frames = 8
-		let frame = 0
-		timer = setInterval(() => {
-			frame += 1
-			const progress = 1 - Math.pow(1 - frame / frames, 3)
-			setDisplayedCount(startCount + (targetCount - startCount) * progress)
-			setDisplayedMax(startMax + (targetMax - startMax) * progress)
-			if (frame >= frames) {
-				clearInterval(timer)
-				timer = undefined
-				setDisplayedCount(targetCount)
-				setDisplayedMax(targetMax)
-			}
-		}, 35)
-		previousCount = targetCount
-		previousMax = targetMax
-	})
-	onCleanup(() => {
-		if (timer !== undefined) clearInterval(timer)
-	})
-
-	return (
-		<box flexDirection="row" height={1} flexShrink={0} gap={1}>
-			<text fg={props.color} width={2} wrapMode="none">
-				{props.glyph ?? ''}
-			</text>
-			<text fg={props.color} width={12} wrapMode="none">
-				{props.label.slice(0, 12)}
-			</text>
-			<Bar value={displayedCount()} max={displayedMax()} color={props.color} />
-			<text fg={props.color} width={3} wrapMode="none">
-				{String(Math.round(displayedCount())).padStart(3)}
-			</text>
-		</box>
-	)
-}
+}) => (
+	<box flexDirection="row" height={1} flexShrink={0} gap={1}>
+		<text fg={props.color} width={2} wrapMode="none">
+			{props.glyph ?? ''}
+		</text>
+		<text fg={props.color} width={12} wrapMode="none">
+			{props.label.slice(0, 12)}
+		</text>
+		<Bar value={props.count} max={props.max} color={props.color} />
+		<text fg={props.color} width={3} wrapMode="none">
+			{String(props.count).padStart(3)}
+		</text>
+	</box>
+)
 
 export const MetaRail = (props: { readonly meta: Meta }) => {
 	// Share of total, so a bar answers "how much of the work was this" rather

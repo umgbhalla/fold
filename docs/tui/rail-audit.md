@@ -1,5 +1,8 @@
 # Right-rail audit: observed state, not speculation
 
+> **Status: acted on.** Everything below is the state that was found. What was
+> done about it is recorded in `## Outcome` at the end of this file.
+
 Captured live via `termctrl` against `packages/fold-cli/test/fixtures/TuiAppFixture.tsx`
 (the OpenTUI host), at 160x46 and 100x40, with `FOLD_TUI_EVENT_SUBAGENT_FIXTURE=1`.
 

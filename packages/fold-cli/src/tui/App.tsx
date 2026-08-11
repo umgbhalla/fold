@@ -557,10 +557,22 @@ export const TuiApp = (props: TuiAppProps) => {
 		const selectedKey = navigation().selectedKey ?? rows().at(-1)?.key
 		if (selectedKey !== undefined) eventsScroller?.scrollChildIntoView(`event:${selectedKey}`)
 	})
-	createEffect(() => {
-		const agentId = selectedAgentId()
-		if (agentId !== null) subagentsScroller?.scrollChildIntoView(`subagent:${agentId}`)
-	})
+	/**
+	 * Keep the selected subagent row in view.
+	 *
+	 * Tracks the selected agent's entry count as well as which agent is selected:
+	 * an expanded row grows from two lines to four the moment its tool starts, and
+	 * a row selected at the bottom edge would otherwise push its own new detail
+	 * lines below the viewport with nothing left to scroll them back.
+	 */
+	const selectedAgentEntryCount = createMemo(
+		() => agents().find((agent) => agent.agentId === selectedAgentId())?.entries.length ?? 0,
+	)
+	createEffect(
+		on([selectedAgentId, selectedAgentEntryCount], ([agentId]) => {
+			if (agentId !== null) subagentsScroller?.scrollChildIntoView(`subagent:${agentId}`)
+		}),
+	)
 	createEffect(() => {
 		const files = changes()
 		setSelectedChange((current) => Math.max(0, Math.min(files.length - 1, current)))
@@ -1297,7 +1309,16 @@ export const TuiApp = (props: TuiAppProps) => {
 			>
 				<KeyHint keyName="H/L" label="PANE" />
 				<KeyHint keyName="J/K" label="NAV" />
-				<KeyHint keyName="ESC" label={navigation().level === 'pane' ? 'SESSIONS' : 'BACK'} />
+				{/* ESC unwinds one step at a time: it leaves the composer, then drops
+				    the selected subagent, and only then leaves the session. The label
+				    has to say which of those the next press will do, or it promises
+				    an exit that is actually one keystroke further away. */}
+				<KeyHint
+					keyName="ESC"
+					label={
+						navigation().level !== 'pane' ? 'BACK' : selectedAgentId() !== null ? 'DESELECT' : 'SESSIONS'
+					}
+				/>
 				<KeyHint keyName="^N" label="NEW" />
 				<KeyHint keyName="^K" label="COMMANDS" />
 				<KeyHint keyName="^C" label="INTRPT" />
