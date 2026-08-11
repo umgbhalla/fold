@@ -22,6 +22,8 @@ import {
 	initialNavigationState,
 	jumpSelection,
 	moveSelection,
+	movePane,
+	reconcilePane,
 	reconcileSelection,
 	type NavigationState,
 } from './Navigation'
@@ -267,6 +269,13 @@ export const TuiApp = (props: TuiAppProps) => {
 	const railPaneWidth = createMemo(() => panes().rail)
 	const railInner = createMemo(() => railInnerWidth(panes().rail))
 	const contextPaneWidth = createMemo(() => panes().context)
+	/**
+	 * The panes actually on screen, left to right, so `h`/`l` cannot walk into the
+	 * rail while it is collapsed.
+	 */
+	const availablePanes = createMemo<ReadonlyArray<NavigationState['pane']>>(() =>
+		panes().rail > 0 ? ['events', 'context', 'subagents'] : ['events', 'context'],
+	)
 	const verboseFooter = createMemo(() => dimensions().width >= 160)
 	const verbLabel = createMemo(() => rootInputVerbLabel(verb()))
 	const isCompacting = createMemo(() => props.compacting?.() === true)
@@ -538,6 +547,9 @@ export const TuiApp = (props: TuiAppProps) => {
 	createEffect(() => setVerb((current) => normalizeRootInputVerb(props.state().status, current)))
 	createEffect(() => setTargetVerb((current) => normalizeRootInputVerb(targetStatus(), current)))
 	createEffect(() => setNavigation((current) => reconcileSelection(current, rowKeys())))
+	// The rail can vanish under the cursor, on a resize or when the last subagent
+	// finishes, which would otherwise leave the active pane pointing at nothing.
+	createEffect(() => setNavigation((current) => reconcilePane(current, availablePanes())))
 	createEffect(() => {
 		const selectedKey = navigation().selectedKey ?? rows().at(-1)?.key
 		if (selectedKey !== undefined) eventsScroller?.scrollChildIntoView(`event:${selectedKey}`)
@@ -727,13 +739,13 @@ export const TuiApp = (props: TuiAppProps) => {
 			case 'left':
 				key.preventDefault()
 				blurComposers()
-				setNavigation((current) => ({ ...current, pane: current.pane === 'subagents' ? 'context' : 'events' }))
+				setNavigation((current) => movePane(current, -1, availablePanes()))
 				return
 			case 'l':
 			case 'right':
 				key.preventDefault()
 				blurComposers()
-				setNavigation((current) => ({ ...current, pane: current.pane === 'events' ? 'context' : 'subagents' }))
+				setNavigation((current) => movePane(current, 1, availablePanes()))
 				return
 			case 'b':
 				setToggles((current) => ({ ...current, glow: !current.glow }))
