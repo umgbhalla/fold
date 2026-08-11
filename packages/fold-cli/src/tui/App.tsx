@@ -106,7 +106,10 @@ export const TuiApp = (props: TuiAppProps) => {
 	const [paletteOpen, setPaletteOpen] = createSignal(false)
 	const [newSessionOpen, setNewSessionOpen] = createSignal(false)
 	const [modelsOpen, setModelsOpen] = createSignal(false)
-	const [railTab, setRailTab] = createSignal<'subagents' | 'meta' | 'skills'>('meta')
+	// The rail opens on the one tab you can actually drive. META has no
+	// navigable rows, so defaulting to it meant J/K did nothing in the rail until
+	// you knew to press Tab.
+	const [railTab, setRailTab] = createSignal<'subagents' | 'meta' | 'skills'>('subagents')
 	const [leftTab, setLeftTab] = createSignal<'events' | 'changes'>('events')
 	const [selectedChange, setSelectedChange] = createSignal(0)
 	const [expandedChanges, setExpandedChanges] = createSignal<ReadonlySet<string>>(new Set())

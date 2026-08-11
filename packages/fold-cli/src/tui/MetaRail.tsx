@@ -45,6 +45,14 @@ const Panel = (props: { readonly title: string; readonly children: JSX.Element }
 	</box>
 )
 
+/**
+ * A bar of `value` out of `max`, drawn against a fixed track.
+ *
+ * `max` is the total of the series, not its largest member. Normalising against
+ * the largest made every single-item series a full bar: one researcher rendered
+ * `██████████ 1` and read as "all of them", which is true only by accident and
+ * false the moment a second type appears.
+ */
 const Bar = (props: { readonly value: number; readonly max: number; readonly color: string }) => {
 	const width = 10
 	const exact = props.max > 0 ? (props.value / props.max) * width : 0
@@ -120,8 +128,19 @@ const MetricRow = (props: {
 }
 
 export const MetaRail = (props: { readonly meta: Meta }) => {
-	const maxAgentType = () => Math.max(1, ...props.meta.agentTypes.map((item) => item[1]))
-	const maxTool = () => Math.max(1, ...props.meta.toolCalls.map((item) => item[1]))
+	// Share of total, so a bar answers "how much of the work was this" rather
+	// than "how does this compare to the biggest one", which was unreadable at a
+	// glance and meaningless with a single entry.
+	const totalAgentTypes = () =>
+		Math.max(
+			1,
+			props.meta.agentTypes.reduce((sum, item) => sum + item[1], 0),
+		)
+	const totalTools = () =>
+		Math.max(
+			1,
+			props.meta.toolCalls.reduce((sum, item) => sum + item[1], 0),
+		)
 	return (
 		<scrollbox flexGrow={1} scrollY scrollbarOptions={tuiScrollbarOptions()}>
 			<Panel title="STATUS">
@@ -177,7 +196,7 @@ export const MetaRail = (props: { readonly meta: Meta }) => {
 						<MetricRow
 							label={item()[0]}
 							count={item()[1]}
-							max={maxAgentType()}
+							max={totalAgentTypes()}
 							color={agentTypeAccent(item()[0])}
 						/>
 					)}
@@ -190,7 +209,7 @@ export const MetaRail = (props: { readonly meta: Meta }) => {
 							glyph={glyphForTool(item()[0])}
 							label={item()[0]}
 							count={item()[1]}
-							max={maxTool()}
+							max={totalTools()}
 							color={colorForTool(item()[0])}
 						/>
 					)}

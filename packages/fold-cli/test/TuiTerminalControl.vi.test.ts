@@ -128,8 +128,9 @@ terminalDescribe('TUI terminal behavior', () => {
 
 		await session.screen.waitForText('researcher', { timeoutMs: 10_000 })
 		await session.keyboard.type('ll')
-		// The rail opens on META, so it is already showing the readouts; Tab from
-		// here would move on to SKILLS.
+		// The rail opens on SUBAGENTS, the one tab with navigable rows, so META is
+		// one Tab away.
+		await session.keyboard.press('Tab')
 		await session.screen.waitForText('AGENT TYPES', { timeoutMs: 10_000 })
 		await session.screen.waitForText('TOOL CALLS', { timeoutMs: 10_000 })
 		const meta = await session.screen.capture({ settleMs: 100, deadlineMs: 5_000, allowIncomplete: true })
@@ -151,8 +152,7 @@ terminalDescribe('TUI terminal behavior', () => {
 
 		await session.screen.waitForText('META', { timeoutMs: 10_000 })
 		await session.keyboard.type('ll')
-		await session.keyboard.press('Tab')
-		await session.keyboard.press('Tab')
+		// SUBAGENTS is already the open tab.
 		await session.screen.waitForText('SUBAGENTS · [SELECTED]', { timeoutMs: 10_000 })
 		await session.screen.waitForText('Overflow task 1', { timeoutMs: 10_000 })
 		let frame = await session.screen.capture({ settleMs: 100, deadlineMs: 5_000, allowIncomplete: true })
@@ -176,6 +176,8 @@ terminalDescribe('TUI terminal behavior', () => {
 
 		await session.screen.waitForText('researcher', { timeoutMs: 10_000 })
 		await session.keyboard.type('ll')
+		// SUBAGENTS -> META -> SKILLS.
+		await session.keyboard.press('Tab')
 		await session.keyboard.press('Tab')
 		await session.screen.waitForText('SKILLS · [SELECTED]', { timeoutMs: 10_000 })
 		await session.screen.waitForText('▸ effect-program-design', { timeoutMs: 10_000 })
