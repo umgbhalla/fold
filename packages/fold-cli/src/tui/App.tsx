@@ -30,7 +30,7 @@ import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
 import { paneWidths, railInnerWidth, type FocusedPane } from './PaneLayout'
 import { renderRow, type RowCell } from './RowLayout'
-import { sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
+import { agentTypeLine, sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
 import {
 	conversationRows,
 	durableConversationRows,
@@ -347,6 +347,7 @@ export const TuiApp = (props: TuiAppProps) => {
 	const railInner = createMemo(() => railInnerWidth(panes().rail))
 	// The tally box is indented one column, so it renders into one less than the pane's inner width.
 	const toolTally = createMemo(() => toolTallyLine(meta().toolCalls, toolGlyph, Math.max(0, railInner() - 1)))
+	const agentTypes = createMemo(() => agentTypeLine(meta().agentTypes, Math.max(0, railInner() - 1)))
 	const contextPaneWidth = createMemo(() => panes().context)
 	/**
 	 * The panes actually on screen, left to right, so `h`/`l` cannot walk into the
@@ -1413,6 +1414,16 @@ export const TuiApp = (props: TuiAppProps) => {
 						{/* What the session's tools actually were, in one line: the panel
 						    of bars this replaces spent a third of the rail's height to say
 						    the same thing. */}
+						{/* The fleet by type, which is the one META readout that had no
+						    home when that tab was retired. Only while the subagent list is
+						    showing: it says nothing about skills. */}
+						<Show when={railTab() === 'subagents' && agentTypes() !== ''}>
+							<box height={1} flexShrink={0} paddingLeft={1}>
+								<text fg={tactical.color.textDim} wrapMode="none">
+									{agentTypes()}
+								</text>
+							</box>
+						</Show>
 						<Show when={toolTally() !== ''}>
 							<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
 								<text fg={tactical.color.textDim} wrapMode="none">

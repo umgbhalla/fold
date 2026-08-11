@@ -102,3 +102,39 @@ export const toolTallyLine = (
 	const gap = Math.max(1, width - line.length - suffix.length)
 	return `${line}${' '.repeat(gap)}${suffix}`
 }
+
+/**
+ * The fleet by agent type, as one line: `8 researcher · 7 general`.
+ *
+ * This is the one readout that had no home when META was retired. The counts
+ * answer "what kind of work is this session doing", which the per-row list
+ * cannot at a glance once the fleet is longer than the pane is tall.
+ *
+ * Types are abbreviated rather than dropped when the rail is narrow: a count
+ * with no label says nothing, and the rail is 30 columns at its narrowest.
+ * When even the abbreviations will not fit, the remainder collapses into
+ * `+N`, so the total the user sees still adds up to the fleet.
+ */
+export const agentTypeLine = (agentTypes: ReadonlyArray<readonly [string, number]>, width: number): string => {
+	if (agentTypes.length === 0 || width <= 0) return ''
+	const shorten = (name: string): string => (name.length <= 10 ? name : `${name.slice(0, 9)}…`)
+	let line = ''
+	let shown = 0
+	for (const [name, count] of agentTypes) {
+		const next = `${line}${line === '' ? '' : ' · '}${count} ${shorten(name)}`
+		const remaining = agentTypes.length - shown - 1
+		// Leave room for the `+N` that will stand in for whatever does not fit.
+		const reserve = remaining > 0 ? ` +${remaining}`.length : 0
+		if (next.length + reserve > width) break
+		line = next
+		shown += 1
+	}
+	if (shown === 0) {
+		// Not even one type fits; say how many there are rather than nothing.
+		const total = agentTypes.reduce((sum, [, count]) => sum + count, 0)
+		const fallback = `${total} agents`
+		return fallback.length <= width ? fallback : ''
+	}
+	const hidden = agentTypes.length - shown
+	return hidden > 0 ? `${line} +${hidden}` : line
+}

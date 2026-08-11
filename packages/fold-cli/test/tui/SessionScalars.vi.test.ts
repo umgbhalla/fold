@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { compactCost, compactTokens, sessionScalarsLine, toolTallyLine } from '../../src/tui/SessionScalars'
+import {
+	compactCost,
+	compactTokens,
+	sessionScalarsLine,
+	toolTallyLine,
+	agentTypeLine,
+} from '../../src/tui/SessionScalars'
 
 const glyphFor = (name: string): string =>
 	name === 'bash' ? '⚙' : name === 'read' ? '▤' : name === 'subagent' ? '★' : '◆'
@@ -109,5 +115,42 @@ describe('toolTallyLine', () => {
 
 	it('renders nothing when no tool has been called', () => {
 		expect(toolTallyLine([], glyphFor, 30)).toBe('')
+	})
+})
+
+describe('agentTypeLine', () => {
+	const fleet = [
+		['researcher', 8],
+		['general-purpose', 7],
+		['reviewer', 2],
+	] as const
+
+	it('lists the fleet by type, busiest first', () => {
+		expect(agentTypeLine(fleet, 44)).toBe('8 researcher · 7 general-p… · 2 reviewer')
+	})
+
+	it('collapses what does not fit into a remainder, so the counts still add up', () => {
+		const line = agentTypeLine(fleet, 20)
+		expect(line).toBe('8 researcher +2')
+		expect(line.length).toBeLessThanOrEqual(20)
+	})
+
+	/** The rail is 30 columns at its narrowest, and can be narrower mid-resize. */
+	it('falls back to a total rather than an unlabelled count', () => {
+		expect(agentTypeLine(fleet, 10)).toBe('17 agents')
+	})
+
+	it('says nothing when even the total will not fit', () => {
+		expect(agentTypeLine(fleet, 4)).toBe('')
+	})
+
+	it('says nothing for an empty fleet', () => {
+		expect(agentTypeLine([], 40)).toBe('')
+	})
+
+	it('never exceeds the width it is given', () => {
+		for (let width = 1; width <= 60; width += 1) {
+			expect(agentTypeLine(fleet, width).length, `width ${width}`).toBeLessThanOrEqual(width)
+		}
 	})
 })
