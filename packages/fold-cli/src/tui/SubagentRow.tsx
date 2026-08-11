@@ -4,7 +4,7 @@ import { createMemo, Show } from 'solid-js'
 
 import { agentTypeAccent } from './AccentPalette'
 import { clampCell, renderRow, type RowCell } from './RowLayout'
-import { subagentActivity, type SubagentActivity } from './SubagentActivity'
+import { expandedRowHeight, subagentActivity, type SubagentActivity } from './SubagentActivity'
 import { relativeSubagentTime, type SubagentStatus, type SubagentView } from './Subagents'
 import { theme } from './ThemeState'
 
@@ -152,6 +152,11 @@ export const SubagentRow = (props: {
 			id={`subagent:${props.agent.agentId}`}
 			flexDirection="column"
 			flexShrink={0}
+			// The height is reserved from the same projection that decides which
+			// detail lines exist, so the row cannot render more lines than the list
+			// budgeted for it and scroll anchoring stays honest as an agent's status
+			// changes underneath the cursor.
+			height={props.selected ? expandedRowHeight(activity()) : 1}
 			backgroundColor={props.selected ? theme.color.raised : theme.color.panel}
 			onMouseDown={() => props.onSelect()}
 		>
