@@ -30,7 +30,9 @@ import {
 } from './Navigation'
 import { NewSessionModal } from './NewSessionModal'
 import type { NewSessionRequest } from './NewSessionModal'
-import { paneWidths, railInnerWidth, type FocusedPane } from './PaneLayout'
+import { paneWidths, railInnerWidth, type FocusedPane, type PaneWidths } from './PaneLayout'
+import { PaneSpine } from './PaneSpine'
+import { stackLayout, type CollapsePolicy, type PaneRenderMode } from './PaneStack'
 import { renderRow, type RowCell } from './RowLayout'
 import { agentTypeLine, sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
 import {
@@ -323,7 +325,30 @@ export const TuiApp = (props: TuiAppProps) => {
 				return 'rail'
 		}
 	})
-	const panes = createMemo(() => paneWidths(dimensions().width, agents().length, focusedPane()))
+	const spreadPanes = createMemo(() => paneWidths(dimensions().width, agents().length, focusedPane()))
+	/**
+	 * Stack mode: unfocused panes collapse to a labelled spine so the focused one
+	 * gets the screen, rather than every pane staying legible and the one you are
+	 * reading getting a third of the terminal.
+	 */
+	const [stackMode, setStackMode] = createSignal<CollapsePolicy>('none')
+	const stackSlots = createMemo(() =>
+		stackLayout(
+			dimensions().width,
+			(['events', 'context', 'rail'] as const).filter((id) => spreadPanes()[id] > 0),
+			focusedPane(),
+			stackMode(),
+			spreadPanes(),
+		),
+	)
+	const slotFor = (id: 'events' | 'context' | 'rail') => stackSlots().find((slot) => slot.id === id)
+	const paneMode = (id: 'events' | 'context' | 'rail'): PaneRenderMode => slotFor(id)?.mode ?? 'full'
+	const panes = createMemo<PaneWidths>(() => {
+		if (stackMode() === 'none') return spreadPanes()
+		const slots = stackSlots()
+		const width = (id: 'events' | 'context' | 'rail'): number => slots.find((slot) => slot.id === id)?.width ?? 0
+		return { events: width('events'), context: width('context'), rail: width('rail') }
+	})
 	/**
 	 * The fleet tally in the rail's tab bar: running, done, failed. This was the
 	 * RUN row of the STATUS panel, which is worth a slot in a bar that is already
@@ -873,6 +898,12 @@ export const TuiApp = (props: TuiAppProps) => {
 				blurComposers()
 				setNavigation((current) => movePane(current, 1, availablePanes()))
 				return
+			case 'z':
+				// Cycle how hard unfocused panes collapse: spread -> keep a
+				// neighbour readable -> spine everything.
+				key.preventDefault()
+				setStackMode((current) => (current === 'none' ? 'far' : current === 'far' ? 'all' : 'none'))
+				return
 			case 'b':
 				setToggles((current) => ({ ...current, glow: !current.glow }))
 				return
@@ -937,580 +968,633 @@ export const TuiApp = (props: TuiAppProps) => {
 			</box>
 
 			<box flexGrow={1} flexDirection="row">
-				<box
-					width={eventPaneWidth()}
-					flexShrink={0}
-					flexDirection="column"
-					border
-					borderStyle={
-						paneState('events') === 'focused'
-							? tactical.chrome.frameStyle
-							: paneState('events') === 'selected'
-								? 'double'
-								: tactical.chrome.panelStyle
+				<Show
+					when={paneMode('events') !== 'spine'}
+					fallback={
+						<PaneSpine
+							label={leftTab() === 'changes' ? 'CHANGES' : 'EVENTS'}
+							height={dimensions().height - 8}
+							active={navigation().pane === 'events'}
+							badge={String(rows().length)}
+							onSelect={() => setNavigation((current) => ({ ...current, pane: 'events', level: 'pane' }))}
+						/>
 					}
-					borderColor={paneBorderColor('events')}
-					title={paneTitle('events', leftTab().toUpperCase())}
-					titleColor={paneTitleColor('events')}
-					backgroundColor={tactical.color.panel}
 				>
-					<box height={1} flexShrink={0} flexDirection="row" gap={2} paddingLeft={1}>
-						<text
-							fg={leftTab() === 'events' ? tactical.color.coreBright : tactical.color.textDim}
-							onMouseDown={() => leftTab() === 'changes' && toggleChanges()}
-						>
-							EVENTS
-						</text>
-						<text
-							fg={leftTab() === 'changes' ? tactical.color.coreBright : tactical.color.textDim}
-							onMouseDown={() => leftTab() === 'events' && toggleChanges()}
-						>
-							CHANGES
-						</text>
-					</box>
-					<scrollbox
-						ref={(renderable) => {
-							eventsScroller = renderable
-							changesScroller = renderable
-						}}
-						flexGrow={1}
-						scrollY
-						scrollbarOptions={tuiScrollbarOptions()}
+					<box
+						width={eventPaneWidth()}
+						flexShrink={0}
+						flexDirection="column"
+						border
+						borderStyle={
+							paneState('events') === 'focused'
+								? tactical.chrome.frameStyle
+								: paneState('events') === 'selected'
+									? 'double'
+									: tactical.chrome.panelStyle
+						}
+						borderColor={paneBorderColor('events')}
+						title={paneTitle('events', leftTab().toUpperCase())}
+						titleColor={paneTitleColor('events')}
+						backgroundColor={tactical.color.panel}
 					>
-						<Show
-							when={leftTab() === 'events'}
-							fallback={
-								<Show
-									when={gitSnapshot()._tag === 'ready'}
-									fallback={<text fg={tactical.color.alert}>{` ${gitSnapshotMessage()}`}</text>}
-								>
+						<box height={1} flexShrink={0} flexDirection="row" gap={2} paddingLeft={1}>
+							<text
+								fg={leftTab() === 'events' ? tactical.color.coreBright : tactical.color.textDim}
+								onMouseDown={() => leftTab() === 'changes' && toggleChanges()}
+							>
+								EVENTS
+							</text>
+							<text
+								fg={leftTab() === 'changes' ? tactical.color.coreBright : tactical.color.textDim}
+								onMouseDown={() => leftTab() === 'events' && toggleChanges()}
+							>
+								CHANGES
+							</text>
+						</box>
+						<scrollbox
+							ref={(renderable) => {
+								eventsScroller = renderable
+								changesScroller = renderable
+							}}
+							flexGrow={1}
+							scrollY
+							scrollbarOptions={tuiScrollbarOptions()}
+						>
+							<Show
+								when={leftTab() === 'events'}
+								fallback={
 									<Show
-										when={changes().length > 0}
-										fallback={<text fg={tactical.color.textFaint}> WORKTREE CLEAN</text>}
+										when={gitSnapshot()._tag === 'ready'}
+										fallback={<text fg={tactical.color.alert}>{` ${gitSnapshotMessage()}`}</text>}
 									>
-										<For each={changeGroups}>
-											{(group) => (
-												<Show when={changes().some((change) => change.group === group.id)}>
-													<text
-														fg={tactical.color.grid}
-														attributes={TextAttributes.BOLD}
-													>{` ${group.label}`}</text>
-													<For each={changes().filter((change) => change.group === group.id)}>
-														{(change) => (
-															<box
-																id={`change:${change.key}`}
-																height={1}
-																flexDirection="row"
-																paddingLeft={1}
-																onMouseDown={() =>
-																	selectChange(
-																		changes().findIndex(
-																			(item) => item.key === change.key,
-																		),
-																	)
-																}
-															>
-																<text
-																	width={2}
-																	fg={
-																		currentChange()?.key === change.key
-																			? tactical.color.coreBright
-																			: tactical.color.textDim
+										<Show
+											when={changes().length > 0}
+											fallback={<text fg={tactical.color.textFaint}> WORKTREE CLEAN</text>}
+										>
+											<For each={changeGroups}>
+												{(group) => (
+													<Show when={changes().some((change) => change.group === group.id)}>
+														<text
+															fg={tactical.color.grid}
+															attributes={TextAttributes.BOLD}
+														>{` ${group.label}`}</text>
+														<For
+															each={changes().filter(
+																(change) => change.group === group.id,
+															)}
+														>
+															{(change) => (
+																<box
+																	id={`change:${change.key}`}
+																	height={1}
+																	flexDirection="row"
+																	paddingLeft={1}
+																	onMouseDown={() =>
+																		selectChange(
+																			changes().findIndex(
+																				(item) => item.key === change.key,
+																			),
+																		)
 																	}
 																>
-																	{currentChange()?.key === change.key ? '▸' : ' '}
-																</text>
-																<text width={3} fg={tactical.color.grid}>
-																	{change.status}
-																</text>
-																<text
-																	width={2}
-																	fg={
-																		isChangeViewed(
+																	<text
+																		width={2}
+																		fg={
+																			currentChange()?.key === change.key
+																				? tactical.color.coreBright
+																				: tactical.color.textDim
+																		}
+																	>
+																		{currentChange()?.key === change.key
+																			? '▸'
+																			: ' '}
+																	</text>
+																	<text width={3} fg={tactical.color.grid}>
+																		{change.status}
+																	</text>
+																	<text
+																		width={2}
+																		fg={
+																			isChangeViewed(
+																				props.viewedPatchHashes?.() ?? {},
+																				change,
+																			)
+																				? tactical.color.textFaint
+																				: tactical.color.coreBright
+																		}
+																	>
+																		{isChangeViewed(
 																			props.viewedPatchHashes?.() ?? {},
 																			change,
 																		)
-																			? tactical.color.textFaint
-																			: tactical.color.coreBright
-																	}
-																>
-																	{isChangeViewed(
-																		props.viewedPatchHashes?.() ?? {},
-																		change,
-																	)
-																		? '✓'
-																		: '●'}
-																</text>
-																<text
-																	flexGrow={1}
-																	truncate
-																	fg={
-																		currentChange()?.key === change.key
-																			? tactical.color.coreBright
-																			: tactical.color.text
-																	}
-																>
-																	{change.path}
-																</text>
-																<text fg={tactical.color.grid} wrapMode="none">
-																	{`+${change.additions}`}
-																</text>
-																<text fg={tactical.color.alert} wrapMode="none">
-																	{`-${change.deletions}`}
-																</text>
-															</box>
-														)}
-													</For>
-												</Show>
-											)}
+																			? '✓'
+																			: '●'}
+																	</text>
+																	<text
+																		flexGrow={1}
+																		truncate
+																		fg={
+																			currentChange()?.key === change.key
+																				? tactical.color.coreBright
+																				: tactical.color.text
+																		}
+																	>
+																		{change.path}
+																	</text>
+																	<text fg={tactical.color.grid} wrapMode="none">
+																		{`+${change.additions}`}
+																	</text>
+																	<text fg={tactical.color.alert} wrapMode="none">
+																		{`-${change.deletions}`}
+																	</text>
+																</box>
+															)}
+														</For>
+													</Show>
+												)}
+											</For>
+										</Show>
+									</Show>
+								}
+							>
+								<Index
+									each={rows()}
+									fallback={<text fg={tactical.color.textFaint}> WAITING FOR EVENTS</text>}
+								>
+									{(row) => (
+										<EventIndexRow
+											row={row}
+											selected={() =>
+												navigation().selectedKey === row().key ||
+												(mode() === 'live' && row().key === lastRowKey())
+											}
+										/>
+									)}
+								</Index>
+							</Show>
+						</scrollbox>
+						<Show when={leftTab() === 'events'}>
+							<box
+								flexDirection="column"
+								height={5}
+								flexShrink={0}
+								paddingLeft={1}
+								paddingRight={1}
+								border={['top']}
+								borderStyle={inputFocused() ? tactical.chrome.frameStyle : tactical.chrome.panelStyle}
+								borderColor={inputFocused() ? tactical.color.coreBright : tactical.chrome.border}
+								backgroundColor={inputFocused() ? tactical.color.raised : tactical.color.panel}
+							>
+								<box flexDirection="row" height={3} flexShrink={0} gap={1} alignItems="flex-start">
+									<text wrapMode="none">
+										<span style={{ fg: tactical.color.grid }}>›</span>
+										<span style={{ fg: tactical.color.text }}> [</span>
+										<span style={{ fg: tactical.color.coreBright }}>{verbLabel()}</span>
+										<span style={{ fg: tactical.color.text }}>] </span>
+									</text>
+									<textarea
+										ref={(renderable) => {
+											editor = renderable
+										}}
+										flexGrow={1}
+										height={2}
+										focused={inputFocused()}
+										initialValue={draft()}
+										placeholder={inputFocused() ? 'MESSAGE ROOT' : 'I TO FOCUS'}
+										placeholderColor={tactical.color.grid}
+										textColor={tactical.color.text}
+										focusedTextColor={tactical.color.coreBright}
+										backgroundColor={tactical.color.panel}
+										focusedBackgroundColor={tactical.color.raised}
+										cursorColor={tactical.color.core}
+										cursorStyle={{ style: 'line', blinking: true }}
+										onSubmit={submitDraft}
+										onContentChange={() => setDraft(editor?.plainText ?? '')}
+									/>
+								</box>
+								<box flexDirection="row" height={1} flexShrink={0}>
+									<text
+										fg={props.notice() === null ? tactical.color.grid : tactical.color.coreBright}
+										wrapMode="none"
+									>
+										{props.notice() ?? ''}
+									</text>
+									<box flexGrow={1} />
+									<text fg={tactical.color.textDim} wrapMode="none">
+										{inputFocused() ? 'ENTER SEND · SHIFT+ENTER NEWLINE · TAB TYPE' : 'I INPUT'}
+									</text>
+								</box>
+								<Show when={isCompacting()}>
+									<box
+										position="absolute"
+										top={0}
+										left={0}
+										width="100%"
+										height="100%"
+										zIndex={5}
+										paddingLeft={1}
+										flexDirection="column"
+										justifyContent="center"
+										backgroundColor={tactical.color.raised}
+									>
+										<text
+											fg={tactical.color.coreBright}
+											attributes={TextAttributes.BOLD}
+											wrapMode="none"
+										>
+											⧗ COMPACTING CONTEXT
+										</text>
+										<text fg={tactical.color.textDim} wrapMode="none">
+											SUMMARIZING CONVERSATION
+										</text>
+									</box>
+								</Show>
+							</box>
+						</Show>
+					</box>
+				</Show>
+				<Show
+					when={paneMode('context') !== 'spine'}
+					fallback={
+						<PaneSpine
+							label="CONTEXT"
+							height={dimensions().height - 8}
+							active={navigation().pane === 'context'}
+							onSelect={() =>
+								setNavigation((current) => ({ ...current, pane: 'context', level: 'pane' }))
+							}
+						/>
+					}
+				>
+					<box
+						flexGrow={1}
+						flexDirection="column"
+						border
+						borderStyle={
+							paneState('context') === 'focused'
+								? tactical.chrome.frameStyle
+								: paneState('context') === 'selected'
+									? 'double'
+									: tactical.chrome.panelStyle
+						}
+						borderColor={paneBorderColor('context')}
+						title={paneTitle(
+							'context',
+							`${TUI_CONTEXT_TITLE.trim()} · [${readerMode() === 'live' ? TUI_LIVE_BADGE : TUI_INSPECT_BADGE}] · ${contextSubject()}`,
+							contextPaneWidth() - 8,
+						)}
+						titleColor={paneTitleColor('context')}
+						backgroundColor={tactical.color.panel}
+					>
+						<scrollbox
+							ref={(renderable) => {
+								contextScroller = renderable
+							}}
+							flexGrow={1}
+							scrollY
+							stickyScroll={readerMode() === 'live'}
+							stickyStart="bottom"
+							scrollbarOptions={tuiScrollbarOptions()}
+						>
+							<Show
+								when={leftTab() === 'events'}
+								fallback={
+									<Show
+										when={gitSnapshot()._tag === 'ready'}
+										fallback={<text fg={tactical.color.alert}>{gitSnapshotMessage()}</text>}
+									>
+										<For each={changes()}>
+											{(change) => {
+												const displayedDiff = () =>
+													expandedChanges().has(change.key)
+														? change.expandedDiff
+														: change.diff
+												return (
+													<box
+														id={`diff:${change.key}`}
+														flexDirection="column"
+														flexShrink={0}
+														paddingX={1}
+														paddingTop={1}
+													>
+														<text
+															fg={
+																currentChange()?.key === change.key
+																	? tactical.color.coreBright
+																	: tactical.color.grid
+															}
+															attributes={TextAttributes.BOLD}
+															wrapMode="none"
+														>
+															{/* The path yields before the state words. A fixed
+														    string truncated from the right, which is what this
+														    was, drops FULL FILE first, so the pane stopped
+														    saying whether the diff was expanded exactly when
+														    the pane got narrow. */}
+															{renderRow(
+																(
+																	[
+																		{ text: '--', weight: 'required' },
+																		{
+																			text: change.path,
+																			weight: 'subject',
+																			minWidth: 8,
+																		},
+																		{
+																			text:
+																				currentChange()?.key === change.key
+																					? '· SELECTED'
+																					: '',
+																			weight: 'optional',
+																			priority: 2,
+																		},
+																		{
+																			text: `· ${change.group.toUpperCase()}`,
+																			weight: 'optional',
+																			priority: 1,
+																		},
+																		{
+																			text: expandedChanges().has(change.key)
+																				? '· FULL FILE'
+																				: '',
+																			weight: 'optional',
+																			priority: 3,
+																		},
+																	] satisfies ReadonlyArray<RowCell>
+																).filter((cell) => cell.text !== ''),
+																Math.max(0, contextPaneWidth() - 6),
+															)}
+														</text>
+														<diff
+															diff={displayedDiff()}
+															view="unified"
+															width="100%"
+															height={diffHeight(displayedDiff())}
+															flexShrink={0}
+															wrapMode="word"
+															showLineNumbers
+															fg={tactical.color.text}
+															addedSignColor={tactical.color.grid}
+															removedSignColor={tactical.color.alert}
+															lineNumberFg={tactical.color.textDim}
+														/>
+													</box>
+												)
+											}}
 										</For>
 									</Show>
-								</Show>
-							}
-						>
-							<Index
-								each={rows()}
-								fallback={<text fg={tactical.color.textFaint}> WAITING FOR EVENTS</text>}
+								}
 							>
-								{(row) => (
-									<EventIndexRow
-										row={row}
-										selected={() =>
-											navigation().selectedKey === row().key ||
-											(mode() === 'live' && row().key === lastRowKey())
-										}
-									/>
-								)}
-							</Index>
-						</Show>
-					</scrollbox>
-					<Show when={leftTab() === 'events'}>
-						<box
-							flexDirection="column"
-							height={5}
-							flexShrink={0}
-							paddingLeft={1}
-							paddingRight={1}
-							border={['top']}
-							borderStyle={inputFocused() ? tactical.chrome.frameStyle : tactical.chrome.panelStyle}
-							borderColor={inputFocused() ? tactical.color.coreBright : tactical.chrome.border}
-							backgroundColor={inputFocused() ? tactical.color.raised : tactical.color.panel}
-						>
-							<box flexDirection="row" height={3} flexShrink={0} gap={1} alignItems="flex-start">
-								<text wrapMode="none">
-									<span style={{ fg: tactical.color.grid }}>›</span>
-									<span style={{ fg: tactical.color.text }}> [</span>
-									<span style={{ fg: tactical.color.coreBright }}>{verbLabel()}</span>
-									<span style={{ fg: tactical.color.text }}>] </span>
-								</text>
+								<Index
+									each={visibleContextRows()}
+									fallback={
+										<box paddingLeft={1}>
+											<text fg={tactical.color.textFaint}>
+												{replayIsReady(props.state().replay)
+													? 'WAITING FOR ROOT-AGENT OUTPUT'
+													: 'LOADING CONVERSATION HISTORY'}
+											</text>
+										</box>
+									}
+								>
+									{(row) => (
+										<Show
+											when={focusedAgent() === undefined && mode() === 'inspect'}
+											fallback={<EventRow row={row} />}
+										>
+											<EventDetail row={row} />
+										</Show>
+									)}
+								</Index>
+							</Show>
+						</scrollbox>
+						<Show when={focusedAgent()}>
+							<box
+								height={5}
+								flexShrink={0}
+								flexDirection="column"
+								border={['top']}
+								borderColor={targetFocused() ? tactical.color.coreBright : tactical.chrome.border}
+								backgroundColor={targetFocused() ? tactical.color.raised : tactical.color.panel}
+								paddingX={1}
+							>
+								<box height={1} flexDirection="row">
+									<text fg={tactical.color.coreBright} wrapMode="none">
+										{`[${targetVerbLabel()}]`}
+									</text>
+									<box flexGrow={1} />
+									<Show when={focusedAgent()?.status === 'running'}>
+										<text
+											fg={tactical.color.textDim}
+											wrapMode="none"
+											onMouseDown={() => {
+												const agent = focusedAgent()
+												if (agent !== undefined) props.onTargetInterrupt?.(agent.agentId)
+											}}
+										>
+											^C INTERRUPT
+										</text>
+									</Show>
+								</box>
 								<textarea
-									ref={(renderable) => {
-										editor = renderable
-									}}
-									flexGrow={1}
+									ref={(value: TextareaRenderable) => (targetEditor = value)}
 									height={2}
-									focused={inputFocused()}
-									initialValue={draft()}
-									placeholder={inputFocused() ? 'MESSAGE ROOT' : 'I TO FOCUS'}
+									focused={targetFocused()}
+									placeholder={targetFocused() ? 'MESSAGE SUBAGENT' : 'I TO FOCUS'}
+									initialValue={targetDraft()}
+									onContentChange={() => setTargetDraft(targetEditor?.plainText ?? '')}
 									placeholderColor={tactical.color.grid}
 									textColor={tactical.color.text}
 									focusedTextColor={tactical.color.coreBright}
 									backgroundColor={tactical.color.panel}
 									focusedBackgroundColor={tactical.color.raised}
-									cursorColor={tactical.color.core}
+									cursorColor={tactical.color.coreBright}
 									cursorStyle={{ style: 'line', blinking: true }}
-									onSubmit={submitDraft}
-									onContentChange={() => setDraft(editor?.plainText ?? '')}
+									onSubmit={submitTargetDraft}
 								/>
-							</box>
-							<box flexDirection="row" height={1} flexShrink={0}>
-								<text
-									fg={props.notice() === null ? tactical.color.grid : tactical.color.coreBright}
-									wrapMode="none"
-								>
-									{props.notice() ?? ''}
-								</text>
-								<box flexGrow={1} />
-								<text fg={tactical.color.textDim} wrapMode="none">
-									{inputFocused() ? 'ENTER SEND · SHIFT+ENTER NEWLINE · TAB TYPE' : 'I INPUT'}
+								<text fg={tactical.color.coreBright} wrapMode="none" truncate>
+									{props.targetNotice?.()?.agentId === focusedAgent()?.agentId
+										? props.targetNotice?.()?.text
+										: ''}
 								</text>
 							</box>
-							<Show when={isCompacting()}>
-								<box
-									position="absolute"
-									top={0}
-									left={0}
-									width="100%"
-									height="100%"
-									zIndex={5}
-									paddingLeft={1}
-									flexDirection="column"
-									justifyContent="center"
-									backgroundColor={tactical.color.raised}
-								>
-									<text
-										fg={tactical.color.coreBright}
-										attributes={TextAttributes.BOLD}
-										wrapMode="none"
-									>
-										⧗ COMPACTING CONTEXT
-									</text>
-									<text fg={tactical.color.textDim} wrapMode="none">
-										SUMMARIZING CONVERSATION
-									</text>
-								</box>
-							</Show>
-						</box>
-					</Show>
-				</box>
-				<box
-					flexGrow={1}
-					flexDirection="column"
-					border
-					borderStyle={
-						paneState('context') === 'focused'
-							? tactical.chrome.frameStyle
-							: paneState('context') === 'selected'
-								? 'double'
-								: tactical.chrome.panelStyle
-					}
-					borderColor={paneBorderColor('context')}
-					title={paneTitle(
-						'context',
-						`${TUI_CONTEXT_TITLE.trim()} · [${readerMode() === 'live' ? TUI_LIVE_BADGE : TUI_INSPECT_BADGE}] · ${contextSubject()}`,
-						contextPaneWidth() - 8,
-					)}
-					titleColor={paneTitleColor('context')}
-					backgroundColor={tactical.color.panel}
-				>
-					<scrollbox
-						ref={(renderable) => {
-							contextScroller = renderable
-						}}
-						flexGrow={1}
-						scrollY
-						stickyScroll={readerMode() === 'live'}
-						stickyStart="bottom"
-						scrollbarOptions={tuiScrollbarOptions()}
-					>
-						<Show
-							when={leftTab() === 'events'}
-							fallback={
-								<Show
-									when={gitSnapshot()._tag === 'ready'}
-									fallback={<text fg={tactical.color.alert}>{gitSnapshotMessage()}</text>}
-								>
-									<For each={changes()}>
-										{(change) => {
-											const displayedDiff = () =>
-												expandedChanges().has(change.key) ? change.expandedDiff : change.diff
-											return (
-												<box
-													id={`diff:${change.key}`}
-													flexDirection="column"
-													flexShrink={0}
-													paddingX={1}
-													paddingTop={1}
-												>
-													<text
-														fg={
-															currentChange()?.key === change.key
-																? tactical.color.coreBright
-																: tactical.color.grid
-														}
-														attributes={TextAttributes.BOLD}
-														wrapMode="none"
-													>
-														{/* The path yields before the state words. A fixed
-														    string truncated from the right, which is what this
-														    was, drops FULL FILE first, so the pane stopped
-														    saying whether the diff was expanded exactly when
-														    the pane got narrow. */}
-														{renderRow(
-															(
-																[
-																	{ text: '--', weight: 'required' },
-																	{
-																		text: change.path,
-																		weight: 'subject',
-																		minWidth: 8,
-																	},
-																	{
-																		text:
-																			currentChange()?.key === change.key
-																				? '· SELECTED'
-																				: '',
-																		weight: 'optional',
-																		priority: 2,
-																	},
-																	{
-																		text: `· ${change.group.toUpperCase()}`,
-																		weight: 'optional',
-																		priority: 1,
-																	},
-																	{
-																		text: expandedChanges().has(change.key)
-																			? '· FULL FILE'
-																			: '',
-																		weight: 'optional',
-																		priority: 3,
-																	},
-																] satisfies ReadonlyArray<RowCell>
-															).filter((cell) => cell.text !== ''),
-															Math.max(0, contextPaneWidth() - 6),
-														)}
-													</text>
-													<diff
-														diff={displayedDiff()}
-														view="unified"
-														width="100%"
-														height={diffHeight(displayedDiff())}
-														flexShrink={0}
-														wrapMode="word"
-														showLineNumbers
-														fg={tactical.color.text}
-														addedSignColor={tactical.color.grid}
-														removedSignColor={tactical.color.alert}
-														lineNumberFg={tactical.color.textDim}
-													/>
-												</box>
-											)
-										}}
-									</For>
-								</Show>
-							}
-						>
-							<Index
-								each={visibleContextRows()}
-								fallback={
-									<box paddingLeft={1}>
-										<text fg={tactical.color.textFaint}>
-											{replayIsReady(props.state().replay)
-												? 'WAITING FOR ROOT-AGENT OUTPUT'
-												: 'LOADING CONVERSATION HISTORY'}
-										</text>
-									</box>
-								}
-							>
-								{(row) => (
-									<Show
-										when={focusedAgent() === undefined && mode() === 'inspect'}
-										fallback={<EventRow row={row} />}
-									>
-										<EventDetail row={row} />
-									</Show>
-								)}
-							</Index>
 						</Show>
-					</scrollbox>
-					<Show when={focusedAgent()}>
-						<box
-							height={5}
-							flexShrink={0}
-							flexDirection="column"
-							border={['top']}
-							borderColor={targetFocused() ? tactical.color.coreBright : tactical.chrome.border}
-							backgroundColor={targetFocused() ? tactical.color.raised : tactical.color.panel}
-							paddingX={1}
-						>
-							<box height={1} flexDirection="row">
-								<text fg={tactical.color.coreBright} wrapMode="none">
-									{`[${targetVerbLabel()}]`}
-								</text>
-								<box flexGrow={1} />
-								<Show when={focusedAgent()?.status === 'running'}>
-									<text
-										fg={tactical.color.textDim}
-										wrapMode="none"
-										onMouseDown={() => {
-											const agent = focusedAgent()
-											if (agent !== undefined) props.onTargetInterrupt?.(agent.agentId)
-										}}
-									>
-										^C INTERRUPT
-									</text>
-								</Show>
-							</box>
-							<textarea
-								ref={(value: TextareaRenderable) => (targetEditor = value)}
-								height={2}
-								focused={targetFocused()}
-								placeholder={targetFocused() ? 'MESSAGE SUBAGENT' : 'I TO FOCUS'}
-								initialValue={targetDraft()}
-								onContentChange={() => setTargetDraft(targetEditor?.plainText ?? '')}
-								placeholderColor={tactical.color.grid}
-								textColor={tactical.color.text}
-								focusedTextColor={tactical.color.coreBright}
+						<Show when={focusedAgent()}>
+							<box
+								position="absolute"
+								right={1}
+								bottom={-1}
+								zIndex={10}
+								width={(focusedAgent()?.agentId.length ?? 0) + 2}
+								height={1}
+								justifyContent="center"
 								backgroundColor={tactical.color.panel}
-								focusedBackgroundColor={tactical.color.raised}
-								cursorColor={tactical.color.coreBright}
-								cursorStyle={{ style: 'line', blinking: true }}
-								onSubmit={submitTargetDraft}
-							/>
-							<text fg={tactical.color.coreBright} wrapMode="none" truncate>
-								{props.targetNotice?.()?.agentId === focusedAgent()?.agentId
-									? props.targetNotice?.()?.text
-									: ''}
-							</text>
-						</box>
-					</Show>
-					<Show when={focusedAgent()}>
-						<box
-							position="absolute"
-							right={1}
-							bottom={-1}
-							zIndex={10}
-							width={(focusedAgent()?.agentId.length ?? 0) + 2}
-							height={1}
-							justifyContent="center"
-							backgroundColor={tactical.color.panel}
-						>
-							<text fg={tactical.color.coreBright} wrapMode="none">
-								{focusedAgent()?.agentId}
-							</text>
-						</box>
-					</Show>
-				</box>
+							>
+								<text fg={tactical.color.coreBright} wrapMode="none">
+									{focusedAgent()?.agentId}
+								</text>
+							</box>
+						</Show>
+					</box>
+				</Show>
 				{/* The rail is not rendered at zero width: an empty bordered column is
 				    still two columns of border, and a session with no subagents should
 				    not pay for a panel that has nothing to list. */}
 				<Show when={railPaneWidth() > 0}>
-					<box
-						width={railPaneWidth()}
-						flexShrink={0}
-						flexDirection="column"
-						border
-						borderStyle={
-							paneState('subagents') === 'focused'
-								? tactical.chrome.frameStyle
-								: paneState('subagents') === 'selected'
-									? 'double'
-									: tactical.chrome.panelStyle
+					<Show
+						when={paneMode('rail') !== 'spine'}
+						fallback={
+							<PaneSpine
+								label={railTab() === 'skills' ? 'SKILLS' : 'SUBAGENTS'}
+								height={dimensions().height - 8}
+								active={navigation().pane === 'subagents'}
+								badge={railTab() === 'skills' ? String(skills().length) : String(agents().length)}
+								onSelect={() =>
+									setNavigation((current) => ({ ...current, pane: 'subagents', level: 'pane' }))
+								}
+							/>
 						}
-						borderColor={paneBorderColor('subagents')}
-						title={paneTitle('subagents', railTab().toUpperCase())}
-						titleColor={paneTitleColor('subagents')}
-						backgroundColor={tactical.color.panel}
 					>
-						{/* Two tabs, not three: META's readouts are scalars, which now
+						<box
+							width={railPaneWidth()}
+							flexShrink={0}
+							flexDirection="column"
+							border
+							borderStyle={
+								paneState('subagents') === 'focused'
+									? tactical.chrome.frameStyle
+									: paneState('subagents') === 'selected'
+										? 'double'
+										: tactical.chrome.panelStyle
+							}
+							borderColor={paneBorderColor('subagents')}
+							title={paneTitle('subagents', railTab().toUpperCase())}
+							titleColor={paneTitleColor('subagents')}
+							backgroundColor={tactical.color.panel}
+						>
+							{/* Two tabs, not three: META's readouts are scalars, which now
 						    live in the header, and its histograms are the tally line at
 						    the foot of this pane. */}
-						<box height={1} flexDirection="row" gap={2} paddingLeft={1}>
-							<text
-								fg={railTab() === 'subagents' ? tactical.color.coreBright : tactical.color.textDim}
-								onMouseDown={() => setRailTab('subagents')}
-							>
-								SUBAGENTS
-							</text>
-							<text
-								fg={railTab() === 'skills' ? tactical.color.coreBright : tactical.color.textDim}
-								onMouseDown={() => setRailTab('skills')}
-							>
-								SKILLS
-							</text>
-							<box flexGrow={1} />
-							<text fg={tactical.color.grid} wrapMode="none">
-								{railRunLabel()}
-							</text>
-						</box>
-						<Show
-							when={railTab() === 'subagents'}
-							fallback={
-								<SkillsRail
-									skills={skills()}
-									selected={selectedSkill()}
-									active={navigation().pane === 'subagents'}
-									width={railInner()}
-									onSelect={setSelectedSkill}
-								/>
-							}
-						>
-							<scrollbox
-								ref={(renderable) => (subagentsScroller = renderable)}
-								flexGrow={1}
-								scrollY
-								scrollbarOptions={tuiScrollbarOptions()}
-							>
-								<Index
-									each={agents()}
-									fallback={<text fg={tactical.color.textFaint}> NO SUBAGENTS</text>}
+							<box height={1} flexDirection="row" gap={2} paddingLeft={1}>
+								<text
+									fg={railTab() === 'subagents' ? tactical.color.coreBright : tactical.color.textDim}
+									onMouseDown={() => setRailTab('subagents')}
 								>
-									{(agent) => (
-										<SubagentRow
-											agent={agent()}
-											selected={selectedAgentId() === agent().agentId}
-											now={now()}
-											width={railInner()}
-											onSelect={() => setSelectedAgentId(agent().agentId)}
-										/>
-									)}
-								</Index>
-							</scrollbox>
-						</Show>
-						{/* The session's shape: the fleet by type and the tool tally.
+									SUBAGENTS
+								</text>
+								<text
+									fg={railTab() === 'skills' ? tactical.color.coreBright : tactical.color.textDim}
+									onMouseDown={() => setRailTab('skills')}
+								>
+									SKILLS
+								</text>
+								<box flexGrow={1} />
+								<text fg={tactical.color.grid} wrapMode="none">
+									{railRunLabel()}
+								</text>
+							</box>
+							<Show
+								when={railTab() === 'subagents'}
+								fallback={
+									<SkillsRail
+										skills={skills()}
+										selected={selectedSkill()}
+										active={navigation().pane === 'subagents'}
+										width={railInner()}
+										onSelect={setSelectedSkill}
+									/>
+								}
+							>
+								<scrollbox
+									ref={(renderable) => (subagentsScroller = renderable)}
+									flexGrow={1}
+									scrollY
+									scrollbarOptions={tuiScrollbarOptions()}
+								>
+									<Index
+										each={agents()}
+										fallback={<text fg={tactical.color.textFaint}> NO SUBAGENTS</text>}
+									>
+										{(agent) => (
+											<SubagentRow
+												agent={agent()}
+												selected={selectedAgentId() === agent().agentId}
+												now={now()}
+												width={railInner()}
+												onSelect={() => setSelectedAgentId(agent().agentId)}
+											/>
+										)}
+									</Index>
+								</scrollbox>
+							</Show>
+							{/* The session's shape: the fleet by type and the tool tally.
 						    These were a whole tab once, which cost a third of a
 						    permanently-visible pane. Now they are two lines while the rail
 						    is a sidebar and expand into labelled bars when it is focused,
 						    which is the row behaviour applied to a pane. */}
-						<Show
-							when={
-								metaDensity(railInner(), dimensions().height, focusedPane() === 'rail') === 'expanded'
-							}
-							fallback={
-								<>
-									<Show when={railTab() === 'subagents' && agentTypes() !== ''}>
-										<box height={1} flexShrink={0} paddingLeft={1}>
-											<text fg={tactical.color.textDim} wrapMode="none">
-												{agentTypes()}
-											</text>
-										</box>
+							<Show
+								when={
+									metaDensity(railInner(), dimensions().height, focusedPane() === 'rail') ===
+									'expanded'
+								}
+								fallback={
+									<>
+										<Show when={railTab() === 'subagents' && agentTypes() !== ''}>
+											<box height={1} flexShrink={0} paddingLeft={1}>
+												<text fg={tactical.color.textDim} wrapMode="none">
+													{agentTypes()}
+												</text>
+											</box>
+										</Show>
+										<Show when={railTab() === 'subagents' && toolTally() !== ''}>
+											<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
+												<text fg={tactical.color.textDim} wrapMode="none">
+													{toolTally()}
+												</text>
+											</box>
+										</Show>
+									</>
+								}
+							>
+								<box flexDirection="column" flexShrink={0} paddingLeft={1} marginBottom={1}>
+									<Show when={railTab() === 'subagents' && agentTypeBars().length > 0}>
+										<text fg={tactical.color.textFaint} wrapMode="none">
+											{`AGENT TYPES · ${meta().agents}`}
+										</text>
+										<Index each={agentTypeBars()}>
+											{(row) => (
+												<text wrapMode="none">
+													<span
+														style={{ fg: tactical.color.textDim }}
+													>{`${row().label} `}</span>
+													<span style={{ fg: agentTypeAccent(row().label.trim()) }}>
+														{row().bar}
+													</span>
+													<span style={{ fg: tactical.color.text }}>{` ${row().count}`}</span>
+												</text>
+											)}
+										</Index>
 									</Show>
-									<Show when={railTab() === 'subagents' && toolTally() !== ''}>
-										<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
-											<text fg={tactical.color.textDim} wrapMode="none">
-												{toolTally()}
-											</text>
-										</box>
+									<Show when={railTab() === 'subagents' && toolBars().length > 0}>
+										<text fg={tactical.color.textFaint} wrapMode="none">
+											{`TOOL CALLS · ${meta().tools}`}
+										</text>
+										<Index each={toolBars()}>
+											{(row) => (
+												<text wrapMode="none">
+													<span style={{ fg: tactical.color.textDim }}>
+														{`${toolGlyph(row().label.trim())} ${row().label} `}
+													</span>
+													<span style={{ fg: tactical.color.core }}>{row().bar}</span>
+													<span style={{ fg: tactical.color.text }}>{` ${row().count}`}</span>
+												</text>
+											)}
+										</Index>
 									</Show>
-								</>
-							}
-						>
-							<box flexDirection="column" flexShrink={0} paddingLeft={1} marginBottom={1}>
-								<Show when={railTab() === 'subagents' && agentTypeBars().length > 0}>
-									<text fg={tactical.color.textFaint} wrapMode="none">
-										{`AGENT TYPES · ${meta().agents}`}
-									</text>
-									<Index each={agentTypeBars()}>
-										{(row) => (
-											<text wrapMode="none">
-												<span style={{ fg: tactical.color.textDim }}>{`${row().label} `}</span>
-												<span style={{ fg: agentTypeAccent(row().label.trim()) }}>
-													{row().bar}
-												</span>
-												<span style={{ fg: tactical.color.text }}>{` ${row().count}`}</span>
-											</text>
-										)}
-									</Index>
-								</Show>
-								<Show when={railTab() === 'subagents' && toolBars().length > 0}>
-									<text fg={tactical.color.textFaint} wrapMode="none">
-										{`TOOL CALLS · ${meta().tools}`}
-									</text>
-									<Index each={toolBars()}>
-										{(row) => (
-											<text wrapMode="none">
-												<span style={{ fg: tactical.color.textDim }}>
-													{`${toolGlyph(row().label.trim())} ${row().label} `}
-												</span>
-												<span style={{ fg: tactical.color.core }}>{row().bar}</span>
-												<span style={{ fg: tactical.color.text }}>{` ${row().count}`}</span>
-											</text>
-										)}
-									</Index>
-								</Show>
-							</box>
-						</Show>
-					</box>
+								</box>
+							</Show>
+						</box>
+					</Show>
 				</Show>
 			</box>
 			<box
