@@ -49,6 +49,7 @@ import { ChangesSection, ModelsSection, SettingsSection } from './RailPanels'
 import { railSectionsFor, type RailSectionId } from './RailRegistry'
 import { railSections } from './RailSections'
 import { renderRow, type RowCell } from './RowLayout'
+import { rowWindow } from './RowWindow'
 import { agentTypeLine, sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
 import {
 	conversationRows,
@@ -319,6 +320,38 @@ export const TuiApp = (props: TuiAppProps) => {
 	 * does not change while its text does, so a memo over just the key settles to
 	 * the same string and stops the invalidation at the boundary.
 	 */
+	/**
+	 * Which rows the index actually renders.
+	 *
+	 * OpenTUI lays out every child of a scrollbox whether or not it is visible,
+	 * so a long transcript costs what it has accumulated rather than what it is
+	 * showing. The window is kept in a signal rather than derived from the
+	 * scrollbox because reading a renderable is not reactive, and it is only
+	 * replaced when the viewport leaves its overscan margin, so scrolling within
+	 * the margin costs nothing.
+	 */
+	const [rowScrollTop, setRowScrollTop] = createSignal(0)
+	const syncRowWindow = (scroller: ScrollBoxRenderable): void => {
+		const scrollTop = Math.max(0, Math.round(scroller.scrollTop))
+		if (rowScrollTop() !== scrollTop) setRowScrollTop(scrollTop)
+	}
+	/**
+	 * The index viewport, in rows, derived from the terminal rather than read
+	 * from the scrollbox.
+	 *
+	 * A renderable's height is zero until the first layout pass, and reading one
+	 * is not reactive, so a window built from it renders an empty list on the
+	 * first frame and never corrects itself. The terminal height is a signal and
+	 * is known before anything is laid out. The chrome around the index (header,
+	 * borders, tab row, composer) is fixed, so subtracting it is exact enough
+	 * for a window that carries an overscan margin anyway.
+	 */
+	const rowViewportHeight = createMemo(() => Math.max(1, dimensions().height - 18))
+	const rowSlice = createMemo(() => {
+		const all = rows()
+		const window = rowWindow(all.length, rowViewportHeight(), rowScrollTop())
+		return { window, rows: all.slice(window.start, window.end) }
+	})
 	const lastRowKey = createMemo(() => rows().at(-1)?.key)
 	const rowKeys = createMemo(() => rows().map((row) => row.key))
 	const mode = createMemo(() => contextMode(navigation(), rowKeys()))
@@ -724,7 +757,20 @@ export const TuiApp = (props: TuiAppProps) => {
 	createEffect(() => setNavigation((current) => reconcilePane(current, availablePanes())))
 	createEffect(() => {
 		const selectedKey = navigation().selectedKey ?? rows().at(-1)?.key
-		if (selectedKey !== undefined) eventsScroller?.scrollChildIntoView(`event:${selectedKey}`)
+		if (selectedKey === undefined) return
+		// A row outside the rendered window has no renderable to scroll to, so
+		// `scrollChildIntoView` would silently do nothing and navigation would
+		// appear to stop at the window edge. Move the window first, by scrolling
+		// to where the row will be, then let the effect settle on the row itself.
+		const index = rows().findIndex((row) => row.key === selectedKey)
+		const slice = rowSlice().window
+		if (index >= 0 && (index < slice.start || index >= slice.end)) {
+			const height = rowViewportHeight()
+			setRowScrollTop(Math.max(0, index - Math.floor(height / 2)))
+			eventsScroller?.scrollTo({ x: 0, y: Math.max(0, index - Math.floor(height / 2)) })
+			return
+		}
+		eventsScroller?.scrollChildIntoView(`event:${selectedKey}`)
 	})
 	/**
 	 * Keep the selected subagent row in view.
@@ -1076,6 +1122,10 @@ export const TuiApp = (props: TuiAppProps) => {
 							ref={(renderable) => {
 								eventsScroller = renderable
 								changesScroller = renderable
+								// The window needs the scroll offset and the viewport height,
+								// and the scrollbox is the only thing that knows either.
+								renderable.on('scroll', () => syncRowWindow(renderable))
+								queueMicrotask(() => syncRowWindow(renderable))
 							}}
 							flexGrow={1}
 							scrollY
@@ -1178,8 +1228,11 @@ export const TuiApp = (props: TuiAppProps) => {
 									</Show>
 								}
 							>
+								<Show when={rowSlice().window.leading > 0}>
+									<box height={rowSlice().window.leading} flexShrink={0} />
+								</Show>
 								<Index
-									each={rows()}
+									each={rowSlice().rows}
 									fallback={<text fg={tactical.color.textFaint}> WAITING FOR EVENTS</text>}
 								>
 									{(row) => (
@@ -1192,6 +1245,9 @@ export const TuiApp = (props: TuiAppProps) => {
 										/>
 									)}
 								</Index>
+								<Show when={rowSlice().window.trailing > 0}>
+									<box height={rowSlice().window.trailing} flexShrink={0} />
+								</Show>
 							</Show>
 						</scrollbox>
 						<Show when={leftTab() === 'events'}>

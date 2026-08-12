@@ -57,7 +57,7 @@ there is nothing to copy: it has to be built.
    loss: today an interruption costs the draft.
 
 3. **Blur-aware notifications** (opencode `attention.ts`, 260 lines;
-   `notifications.ts:11-17`). OS notification only when the terminal is *not*
+   `notifications.ts:11-17`). OS notification only when the terminal is _not_
    focused, per-event sounds, and subagent completions deliberately never
    raise an OS notification because they are not user-blocking. For an agent
    that runs long tools, this is the difference between watching and working.
