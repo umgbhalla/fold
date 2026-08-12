@@ -90,6 +90,15 @@ export type TuiAppProps = {
 	readonly onConfigureModels?: (selection: ModelSelectionRequest) => void
 	readonly onOpenProviders?: () => void
 	readonly onBackToSessions?: () => void
+	/**
+	 * False while another route is on screen.
+	 *
+	 * The session view stays mounted when the picker or the provider page takes
+	 * over, so that returning to it does not rebuild every pane and row. A
+	 * mounted view still receives keys, though, so it has to decline them while
+	 * it is not the thing the user is looking at.
+	 */
+	readonly visible?: () => boolean
 	readonly onCopySessionId?: () => void
 	readonly toggles?: Accessor<FxToggles>
 	readonly setToggles?: (update: (current: FxToggles) => FxToggles) => void
@@ -777,6 +786,7 @@ export const TuiApp = (props: TuiAppProps) => {
 
 	useKeyboard((key: KeyEvent) => {
 		if (key.eventType === 'release') return
+		if (props.visible?.() === false) return
 		if (paletteOpen() || newSessionOpen() || modelsOpen()) return
 		if (confirmSkill() !== null) {
 			key.preventDefault()

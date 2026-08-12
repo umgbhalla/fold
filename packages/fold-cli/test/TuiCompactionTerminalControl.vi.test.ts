@@ -18,7 +18,11 @@ terminalDescribe('TUI manual compaction', () => {
 			command: ['bun', '--preload', '@opentui/solid/preload', 'test/fixtures/TuiCompactionFixture.tsx'],
 			cwd: import.meta.dirname.replace(/\/test$/, ''),
 			host: 'opentui',
-			viewport: { cols: 150, rows: 48 },
+			// The rail is resident now, so a 150-column terminal leaves the reader
+			// too narrow for the compaction prompt to appear unwrapped. This spec is
+			// about the compaction view's content, not about the layout at a width
+			// where three panes barely fit.
+			viewport: { cols: 190, rows: 48 },
 			record: 'on-failure',
 		})
 
