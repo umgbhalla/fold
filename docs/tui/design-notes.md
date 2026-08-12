@@ -48,19 +48,22 @@ there is nothing to copy: it has to be built.
 
 ## Worth building, in order
 
-1. **Transcript windowing** (above). Render the visible slice plus a margin,
-   pad with a spacer of the right height so the scrollbar still behaves.
-   The row heights are already computed for layout, so the slice is derivable.
+1. **Transcript windowing** — done (`src/tui/RowWindow.ts`). OpenTUI's
+   `viewportCulling` skips painting, but Yoga still lays out every child, so
+   the slice has to be taken before the tree is built. At 1200 rows: apply
+   510→199ms, CPU 1965→1432ms, 44.8→47.0fps.
 
-2. **Prompt stash** (opencode `prompt/stash.tsx`, 89 lines). Park a
-   half-written prompt and come back to it. Cheap, and it prevents real data
-   loss: today an interruption costs the draft.
+2. **Prompt stash** — done (`src/tui/PromptStash.ts`). `^S` parks a draft,
+   `^P` brings it back. Stored outside the project-scoped sessions directory,
+   so a draft survives switching projects.
 
-3. **Blur-aware notifications** (opencode `attention.ts`, 260 lines;
-   `notifications.ts:11-17`). OS notification only when the terminal is _not_
-   focused, per-event sounds, and subagent completions deliberately never
-   raise an OS notification because they are not user-blocking. For an agent
-   that runs long tools, this is the difference between watching and working.
+3. **Blur-aware notifications** — done (`src/tui/Attention.ts`). DEC mode 1004
+   for focus, OSC 777 for the notification, keyed on the transition out of
+   RUNNING per session. Note for whoever does 5 and 7: opencode's version has
+   kinds for permission and subagent-finished, and both were written here and
+   then removed, because fold has no approval gate and raises no
+   subagent-finished event, so the kinds had no producer and their tests only
+   tested themselves. Add the kind next to the code that emits it.
 
 4. **Retry countdown** (pi `status-indicator.ts:39-60`, `countdown-timer.ts`).
    "Retrying (2/5) in 8s, ctrl+c to cancel" instead of a stalled spinner.
@@ -79,7 +82,10 @@ there is nothing to copy: it has to be built.
 
 7. **Permission diff preview** (opencode `permission.tsx:22-88`). Render the
    actual diff inside the approval prompt, split or unified by terminal
-   width, rather than approving a description of a change.
+   width, rather than approving a description of a change. Bigger than it
+   looks: fold has no approval gate at all, so nothing in the runtime ever
+   waits for a human. This is a runtime feature with a UI on top, not a UI
+   feature, and it is the prerequisite for a `permission` notification.
 
 ## MCP: what it would actually cost
 
