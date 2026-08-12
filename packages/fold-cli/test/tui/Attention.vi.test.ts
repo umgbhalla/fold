@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-	attentionMessage,
-	notificationSequence,
-	readFocusReport,
-	shouldNotify,
-	type FocusState,
-} from '../../src/tui/Attention'
+import { attentionMessage, notificationSequence, readFocusReport, shouldNotify } from '../../src/tui/Attention'
 
 describe('shouldNotify', () => {
 	/**
@@ -14,31 +8,16 @@ describe('shouldNotify', () => {
 	 * notifying: it teaches them to ignore the next one.
 	 */
 	it('stays quiet while the window has focus', () => {
-		expect(shouldNotify('turn_done', 'focused')).toBe(false)
-		expect(shouldNotify('permission', 'focused')).toBe(false)
-		expect(shouldNotify('error', 'focused')).toBe(false)
+		expect(shouldNotify('focused')).toBe(false)
 	})
 
 	it('notifies when the window is away', () => {
-		expect(shouldNotify('turn_done', 'blurred')).toBe(true)
-		expect(shouldNotify('permission', 'blurred')).toBe(true)
+		expect(shouldNotify('blurred')).toBe(true)
 	})
 
 	/** A missed notification is a worse failure than a redundant one. */
 	it('notifies when the terminal never reported focus', () => {
-		expect(shouldNotify('turn_done', 'unknown')).toBe(true)
-	})
-
-	/**
-	 * A subagent finishing is progress, not a question: the root agent keeps
-	 * working and nothing waits on the user. A parallel session would otherwise
-	 * raise a dozen notifications nobody acted on.
-	 */
-	it('never notifies for a subagent, however the window is', () => {
-		const states: ReadonlyArray<FocusState> = ['unknown', 'focused', 'blurred']
-		for (const focus of states) {
-			expect(shouldNotify('subagent_done', focus), `focus ${focus}`).toBe(false)
-		}
+		expect(shouldNotify('unknown')).toBe(true)
 	})
 })
 
@@ -67,7 +46,8 @@ describe('readFocusReport', () => {
 
 describe('attentionMessage', () => {
 	it('says what happened, with the detail when there is one', () => {
-		expect(attentionMessage('permission', 'bash rm -rf')).toBe('Waiting for approval: bash rm -rf')
+		expect(attentionMessage('error', 'fold')).toBe('Turn failed: fold')
+		expect(attentionMessage('turn_done', 'fold')).toBe('Ready: fold')
 		expect(attentionMessage('turn_done', '')).toBe('Ready')
 	})
 })

@@ -20,35 +20,33 @@ export const ENABLE_FOCUS_REPORTING = '\u001b[?1004h'
 /** Disable it again, so the shell does not inherit a terminal that reports. */
 export const DISABLE_FOCUS_REPORTING = '\u001b[?1004l'
 
-/** What a notification is for, which decides whether it interrupts. */
+/**
+ * What a notification is for.
+ *
+ * Only the two events the runtime actually produces are listed. There is no
+ * approval gate in fold: tools never wait for a human, so a `permission` kind
+ * would be an interface with no caller, and a subagent-finished kind has no
+ * producer either. Both were written and removed: a kind nothing emits is only
+ * ever exercised by its own test, which then proves nothing about the product.
+ * Add them back beside the code that raises them.
+ */
 export type AttentionKind =
 	/** The session finished its turn and is waiting for you. */
 	| 'turn_done'
-	/** A tool wants approval and nothing proceeds until it has one. */
-	| 'permission'
 	/** The turn failed. */
 	| 'error'
-	/** A subagent finished, while the root agent carries on. */
-	| 'subagent_done'
 
 /**
  * Whether to raise an OS notification.
  *
- * Subagent completions never do. They are progress, not a question: the root
- * agent keeps working and nothing is waiting on the user. Notifying for them
- * means a long parallel session raises a dozen notifications nobody acted on,
- * which is how a user learns to turn notifications off entirely.
+ * Notifying someone who is watching the screen is worse than not notifying at
+ * all: it teaches them to ignore the next one.
  */
-export const shouldNotify = (kind: AttentionKind, focus: FocusState): boolean => {
-	if (kind === 'subagent_done') return false
-	return focus !== 'focused'
-}
+export const shouldNotify = (focus: FocusState): boolean => focus !== 'focused'
 
 /** The message an OS notification carries. */
 export const attentionMessage = (kind: AttentionKind, detail: string): string => {
-	if (kind === 'permission') return detail === '' ? 'Waiting for approval' : `Waiting for approval: ${detail}`
 	if (kind === 'error') return detail === '' ? 'Turn failed' : `Turn failed: ${detail}`
-	if (kind === 'subagent_done') return detail === '' ? 'Subagent finished' : `Subagent finished: ${detail}`
 	return detail === '' ? 'Ready' : `Ready: ${detail}`
 }
 

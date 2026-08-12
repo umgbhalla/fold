@@ -106,7 +106,7 @@ export const runTui = (
 			}),
 		)
 		const notifyAttention = (kind: AttentionKind, detail: string): void => {
-			if (!shouldNotify(kind, terminalFocus())) return
+			if (!shouldNotify(terminalFocus())) return
 			process.stdout.write(notificationSequence('fold', attentionMessage(kind, detail)))
 		}
 		const runFork = Effect.runForkWith(yield* Effect.context<Scope.Scope>())
