@@ -27,8 +27,8 @@
 /** What a section shows in a collapsed rail. */
 export type SectionDetail = 'full' | 'short' | 'icon'
 
-export type RailSection = {
-	readonly id: string
+export type RailSection<Id extends string = string> = {
+	readonly id: Id
 	/** Spelled-out name, used at `full`. */
 	readonly label: string
 	/** One glyph, used at `icon`. Should read at a glance without its name. */
@@ -41,8 +41,8 @@ export type RailSection = {
 	readonly count?: number
 }
 
-export type SectionView = {
-	readonly id: string
+export type SectionView<Id extends string = string> = {
+	readonly id: Id
 	readonly detail: SectionDetail
 	/** What to draw: the label, an abbreviation, or the icon. */
 	readonly text: string
@@ -69,7 +69,10 @@ const shorten = (label: string): string => label.slice(0, 4)
  * Active sections sort as if just touched, so a subagent finishing while you
  * are elsewhere promotes its section instead of letting it decay silently.
  */
-export const railSections = (sections: ReadonlyArray<RailSection>, height: number): ReadonlyArray<SectionView> => {
+export const railSections = <Id extends string>(
+	sections: ReadonlyArray<RailSection<Id>>,
+	height: number,
+): ReadonlyArray<SectionView<Id>> => {
 	if (sections.length === 0 || height <= 0) return []
 
 	const ordered = [...sections].sort((left, right) => {
@@ -79,7 +82,7 @@ export const railSections = (sections: ReadonlyArray<RailSection>, height: numbe
 	})
 
 	// Everything starts as an icon, which is the floor that always fits.
-	const detail = new Map<string, SectionDetail>()
+	const detail = new Map<Id, SectionDetail>()
 	for (const section of ordered) detail.set(section.id, 'icon')
 	const used = (): number =>
 		ordered.reduce(
@@ -105,7 +108,7 @@ export const railSections = (sections: ReadonlyArray<RailSection>, height: numbe
 
 	// Everything as an icon is the floor, and even that can overflow a short
 	// rail. Drop the least recent sections rather than draw past the border.
-	const fitted: Array<RailSection> = []
+	const fitted: Array<RailSection<Id>> = []
 	let spent = 0
 	for (const section of ordered) {
 		const rows = rowsFor(detail.get(section.id) ?? 'icon', section.label, section.count !== undefined)

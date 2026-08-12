@@ -7,7 +7,19 @@ import { TextAttributes, type KeyEvent, type ScrollBoxRenderable, type TextareaR
 import { registerManagedTextareaLayer } from '@opentui/keymap/addons/opentui'
 import { createDefaultOpenTuiKeymap } from '@opentui/keymap/opentui'
 import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid'
-import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show, type Accessor } from 'solid-js'
+import {
+	createEffect,
+	createMemo,
+	createSignal,
+	For,
+	Index,
+	Match,
+	on,
+	onCleanup,
+	Show,
+	Switch,
+	type Accessor,
+} from 'solid-js'
 
 import { agentTypeAccent } from './AccentPalette'
 import { ActivityIndicator, type ActivityState } from './ActivityIndicator'
@@ -33,6 +45,9 @@ import type { NewSessionRequest } from './NewSessionModal'
 import { paneWidths, railInnerWidth, type FocusedPane, type PaneWidths } from './PaneLayout'
 import { PaneSpine } from './PaneSpine'
 import { stackLayout, type CollapsePolicy, type PaneRenderMode } from './PaneStack'
+import { ChangesSection, ModelsSection, SettingsSection } from './RailPanels'
+import { railSectionsFor, type RailSectionId } from './RailRegistry'
+import { railSections } from './RailSections'
 import { renderRow, type RowCell } from './RowLayout'
 import { agentTypeLine, sessionScalarsLine, toolGlyph, toolTallyLine } from './SessionScalars'
 import {
@@ -114,7 +129,24 @@ export const TuiApp = (props: TuiAppProps) => {
 	const [modelsOpen, setModelsOpen] = createSignal(false)
 	// Both rail tabs are navigable, so J/K always does something. META is gone:
 	// its scalars are in the header and its histograms are the tally line.
-	const [railTab, setRailTab] = createSignal<'subagents' | 'skills'>('subagents')
+	const [railTab, setRailTab] = createSignal<RailSectionId>('subagents')
+	/**
+	 * When each rail section was last opened, as a counter rather than a clock.
+	 * The recency model only compares these, and a counter cannot drift or tie.
+	 */
+	const [touchClock, setTouchClock] = createSignal(5)
+	const [touched, setTouched] = createSignal<Record<RailSectionId, number>>({
+		subagents: 5,
+		skills: 4,
+		changes: 3,
+		models: 2,
+		settings: 1,
+	})
+	const touchSection = (id: RailSectionId): void => {
+		const next = touchClock() + 1
+		setTouchClock(next)
+		setTouched((current) => ({ ...current, [id]: next }))
+	}
 	const [leftTab, setLeftTab] = createSignal<'events' | 'changes'>('events')
 	const [selectedChange, setSelectedChange] = createSignal(0)
 	const [expandedChanges, setExpandedChanges] = createSignal<ReadonlySet<string>>(new Set())
@@ -246,8 +278,27 @@ export const TuiApp = (props: TuiAppProps) => {
 			([, agentId]) => skillViews(props.state().allEntries, agentId),
 		),
 	)
+	/** The sections this session actually has, in recency order. */
+	const activeSections = createMemo(() =>
+		railSectionsFor({
+			agents: agents(),
+			skills: skills(),
+			changes: changes(),
+			configuration: props.configuration,
+			touched: touched(),
+		}),
+	)
+	/** Their detail level for the rail's current height. */
+	const sectionViews = createMemo(() => railSections(activeSections(), Math.max(0, dimensions().height - 10)))
+	const selectRailSection = (id: RailSectionId): void => {
+		setRailTab(id)
+		touchSection(id)
+	}
 	const nextRailTab = (): void => {
-		setRailTab((current) => (current === 'subagents' ? 'skills' : 'subagents'))
+		const ids = activeSections().map((section) => section.id)
+		const index = ids.indexOf(railTab())
+		const next = ids[(index + 1) % Math.max(1, ids.length)]
+		if (next !== undefined) selectRailSection(next)
 	}
 	/**
 	 * The key of the newest row, as a memo of its own.
@@ -1472,22 +1523,31 @@ export const TuiApp = (props: TuiAppProps) => {
 							titleColor={paneTitleColor('subagents')}
 							backgroundColor={tactical.color.panel}
 						>
-							{/* Two tabs, not three: META's readouts are scalars, which now
-						    live in the header, and its histograms are the tally line at
-						    the foot of this pane. */}
-							<box height={1} flexDirection="row" gap={2} paddingLeft={1}>
-								<text
-									fg={railTab() === 'subagents' ? tactical.color.coreBright : tactical.color.textDim}
-									onMouseDown={() => setRailTab('subagents')}
-								>
-									SUBAGENTS
-								</text>
-								<text
-									fg={railTab() === 'skills' ? tactical.color.coreBright : tactical.color.textDim}
-									onMouseDown={() => setRailTab('skills')}
-								>
-									SKILLS
-								</text>
+							{/* The sections the session actually has, rather than a fixed tab pair.
+			    A section with nothing in it is not listed, and the ones you have not
+			    opened lately shrink to their glyph, so the bar stays one row however
+			    many sections exist. */}
+							<box height={1} flexDirection="row" gap={1} paddingLeft={1}>
+								<Index each={activeSections()}>
+									{(section) => (
+										<text
+											fg={
+												railTab() === section().id
+													? tactical.color.coreBright
+													: section().active === true
+														? tactical.color.core
+														: tactical.color.textDim
+											}
+											onMouseDown={() => selectRailSection(section().id)}
+											wrapMode="none"
+										>
+											{railTab() === section().id
+												? section().label
+												: (sectionViews().find((view) => view.id === section().id)?.text ??
+													section().icon)}
+										</text>
+									)}
+								</Index>
 								<box flexGrow={1} />
 								<text fg={tactical.color.grid} wrapMode="none">
 									{railRunLabel()}
@@ -1496,13 +1556,42 @@ export const TuiApp = (props: TuiAppProps) => {
 							<Show
 								when={railTab() === 'subagents'}
 								fallback={
-									<SkillsRail
-										skills={skills()}
-										selected={selectedSkill()}
-										active={navigation().pane === 'subagents'}
-										width={railInner()}
-										onSelect={setSelectedSkill}
-									/>
+									<Switch
+										fallback={
+											<SkillsRail
+												skills={skills()}
+												selected={selectedSkill()}
+												active={navigation().pane === 'subagents'}
+												width={railInner()}
+												onSelect={setSelectedSkill}
+											/>
+										}
+									>
+										<Match when={railTab() === 'changes'}>
+											<ChangesSection
+												changes={changes()}
+												width={railInner()}
+												onSelect={(change) => props.onViewChange?.(change)}
+											/>
+										</Match>
+										<Match when={railTab() === 'models'}>
+											<ModelsSection
+												providers={props.configuration?.providers ?? []}
+												current={props.state().model}
+												width={railInner()}
+											/>
+										</Match>
+										<Match when={railTab() === 'settings'}>
+											<SettingsSection
+												cwd={props.cwd}
+												mode={props.mode}
+												profile={props.profile}
+												model={props.state().model}
+												reasoning={props.state().reasoningLevel ?? 'off'}
+												width={railInner()}
+											/>
+										</Match>
+									</Switch>
 								}
 							>
 								<scrollbox
