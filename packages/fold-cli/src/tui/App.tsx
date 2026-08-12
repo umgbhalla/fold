@@ -1465,7 +1465,7 @@ export const TuiApp = (props: TuiAppProps) => {
 											</text>
 										</box>
 									</Show>
-									<Show when={toolTally() !== ''}>
+									<Show when={railTab() === 'subagents' && toolTally() !== ''}>
 										<box height={1} flexShrink={0} paddingLeft={1} marginBottom={1}>
 											<text fg={tactical.color.textDim} wrapMode="none">
 												{toolTally()}
@@ -1492,7 +1492,7 @@ export const TuiApp = (props: TuiAppProps) => {
 										)}
 									</Index>
 								</Show>
-								<Show when={toolBars().length > 0}>
+								<Show when={railTab() === 'subagents' && toolBars().length > 0}>
 									<text fg={tactical.color.textFaint} wrapMode="none">
 										{`TOOL CALLS · ${meta().tools}`}
 									</text>
