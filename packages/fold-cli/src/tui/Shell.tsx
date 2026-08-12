@@ -26,6 +26,16 @@ import { FetchHttpClient } from 'effect/unstable/http'
 import { batch, createEffect, createSignal, Show, type Accessor } from 'solid-js'
 
 import { TuiApp } from './App'
+import {
+	attentionMessage,
+	DISABLE_FOCUS_REPORTING,
+	ENABLE_FOCUS_REPORTING,
+	notificationSequence,
+	readFocusReport,
+	shouldNotify,
+	type AttentionKind,
+	type FocusState,
+} from './Attention'
 import { loadGitSnapshot, type GitSnapshot } from './GitChanges'
 import type { HostedTuiSession } from './HostedTuiSession'
 import { openUrlInBrowser } from './OpenUrl'
@@ -74,6 +84,31 @@ export const runTui = (
 	Effect.gen(function* () {
 		if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) return yield* new TuiRequiresTtyError()
 		const quit = yield* Deferred.make<void>()
+
+		/**
+		 * Focus reporting, so a notification only fires when the user is away.
+		 *
+		 * DEC mode 1004 makes the terminal send a report on every focus change.
+		 * It is disabled again on the way out, or the shell inherits a terminal
+		 * that emits escape sequences into whatever runs next.
+		 */
+		const [terminalFocus, setTerminalFocus] = createSignal<FocusState>('unknown')
+		process.stdout.write(ENABLE_FOCUS_REPORTING)
+		const onFocusChunk = (chunk: Buffer | string): void => {
+			const focus = readFocusReport(typeof chunk === 'string' ? chunk : chunk.toString('utf8'))
+			if (focus !== null) setTerminalFocus(focus)
+		}
+		process.stdin.on('data', onFocusChunk)
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				process.stdin.off('data', onFocusChunk)
+				process.stdout.write(DISABLE_FOCUS_REPORTING)
+			}),
+		)
+		const notifyAttention = (kind: AttentionKind, detail: string): void => {
+			if (!shouldNotify(kind, terminalFocus())) return
+			process.stdout.write(notificationSequence('fold', attentionMessage(kind, detail)))
+		}
 		const runFork = Effect.runForkWith(yield* Effect.context<Scope.Scope>())
 		const configOptions = options.foldHome === undefined ? {} : { foldHome: options.foldHome }
 		// Bootstrap before config loading. A failed bootstrap is visible in the TUI and must not be
@@ -430,6 +465,29 @@ export const runTui = (
 			setStash(entries)
 			runFork(writePromptStash(serializeStash(entries), stashLayoutOptions))
 		}
+
+		/**
+		 * Notify when a turn ends while the user is elsewhere.
+		 *
+		 * Keyed on the transition out of RUNNING rather than on the status itself,
+		 * so re-rendering an idle session does not re-notify. The previous status
+		 * is per-session: switching to a session that is already idle is not a
+		 * turn that just finished.
+		 */
+		const lastStatus = new Map<string, string>()
+		createEffect(() => {
+			const hosted = active()
+			if (hosted === null) return
+			const status = hosted.state().status
+			const previous = lastStatus.get(hosted.sessionId)
+			lastStatus.set(hosted.sessionId, status)
+			if (previous !== 'RUNNING') return
+			// The working directory is the label the user recognises a session by
+			// when the notification is all they can see.
+			const label = hosted.cwd.split('/').pop() ?? ''
+			if (status === 'IDLE') notifyAttention('turn_done', label)
+			else if (status === 'ERROR') notifyAttention('error', label)
+		})
 
 		const [mountedSession, setMountedSession] = createSignal<HostedTuiSession | null>(null)
 		createEffect(() => {
