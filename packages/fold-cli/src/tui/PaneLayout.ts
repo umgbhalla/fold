@@ -51,7 +51,11 @@ const clamp = (value: number, low: number, high: number): number => Math.min(hig
  * something you keep.
  */
 export const railWidthFor = (totalWidth: number, agentCount: number): number => {
-	if (agentCount === 0) return 0
+	// The rail used to vanish with no subagents, back when a roster was all it
+	// held. It now carries settings, models and changed files too, and those
+	// exist from the first frame of a session, so hiding it until an agent
+	// spawns hid the pane entirely for anyone who never delegates.
+	void agentCount
 	if (totalWidth < 110) return 0
 	if (totalWidth < 140) return 30
 	return 44

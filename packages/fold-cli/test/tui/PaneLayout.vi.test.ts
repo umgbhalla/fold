@@ -5,8 +5,15 @@ import { paneWidths, railInnerWidth, railWidthFor } from '../../src/tui/PaneLayo
 const widths = [80, 100, 110, 120, 140, 160, 200]
 
 describe('railWidthFor', () => {
-	it('gives the rail no columns when there are no subagents', () => {
-		for (const width of widths) expect(railWidthFor(width, 0)).toBe(0)
+	/**
+	 * The rail is resident from the first frame, with or without subagents. It
+	 * used to vanish when the roster was empty, which was right while a roster
+	 * was all it held and wrong once it carried settings, models and changed
+	 * files: a session where nobody delegates never saw the pane at all.
+	 */
+	it('keeps the rail resident with no subagents, because it holds more than the roster', () => {
+		expect(railWidthFor(160, 0)).toBe(44)
+		expect(railWidthFor(120, 0)).toBe(30)
 	})
 
 	/**
@@ -69,11 +76,8 @@ describe('paneWidths', () => {
 		}
 	})
 
-	it('hands the rail columns to the reader when there are no agents', () => {
-		const withAgents = paneWidths(160, 3)
-		const without = paneWidths(160, 0)
-		expect(without.rail).toBe(0)
-		expect(without.context).toBe(withAgents.context + withAgents.rail)
+	it('sizes the same with or without agents, since the rail is always resident', () => {
+		expect(paneWidths(160, 0)).toEqual(paneWidths(160, 3))
 	})
 
 	it('stops growing the index once it is wide enough to read', () => {
@@ -127,7 +131,7 @@ describe('focus', () => {
 
 	/** A rail that is not on screen has nothing to lend and nothing to claim. */
 	it('changes nothing when the focused pane is not rendered', () => {
-		expect(paneWidths(160, 0, 'rail')).toEqual(paneWidths(160, 0))
+		// Below 110 columns the rail is still absent, so focusing it is a no-op.
 		expect(paneWidths(100, 15, 'rail')).toEqual(paneWidths(100, 15))
 	})
 
