@@ -45,6 +45,7 @@ import type { NewSessionRequest } from './NewSessionModal'
 import { paneWidths, railInnerWidth, type FocusedPane, type PaneWidths } from './PaneLayout'
 import { PaneSpine } from './PaneSpine'
 import { stackLayout, type CollapsePolicy, type PaneRenderMode } from './PaneStack'
+import { dropStash, pushStash, stashLabel, type StashEntry } from './PromptStash'
 import { ChangesSection, ModelsSection, SettingsSection } from './RailPanels'
 import { railSectionsFor, type RailSectionId } from './RailRegistry'
 import { railSections } from './RailSections'
@@ -107,6 +108,9 @@ export type TuiAppProps = {
 	readonly onTargetSubmit?: (agentId: string, text: string, verb: RootInputVerb) => void
 	readonly onTargetInterrupt?: (agentId: string) => void
 	readonly onInjectSkill?: (skill: string, agentId: string | null) => void
+	/** Parked drafts, loaded once by the shell and written back on change. */
+	readonly stash?: () => ReadonlyArray<StashEntry>
+	readonly onStashChange?: (entries: ReadonlyArray<StashEntry>) => void
 	readonly initialSelectedAgentId?: string
 	readonly gitSnapshot?: Accessor<GitSnapshot>
 	readonly viewedPatchHashes?: Accessor<ViewedPatchHashes>
@@ -134,6 +138,34 @@ export const TuiApp = (props: TuiAppProps) => {
 	const renderer = useRenderer()
 	const dimensions = useTerminalDimensions()
 	const [draft, setDraft] = createSignal('')
+	const [stashOpen, setStashOpen] = createSignal(false)
+	/** A local notice, for actions the shell does not know about. */
+	const [localNotice, setLocalNotice] = createSignal<string | null>(null)
+	const [stashIndex, setStashIndex] = createSignal(0)
+	const stashEntries = createMemo(() => props.stash?.() ?? [])
+	/**
+	 * Park the draft. The composer is the one place the user has made something
+	 * the app cannot regenerate, and today an interruption throws it away.
+	 */
+	const stashDraft = (): void => {
+		const text = editor?.plainText ?? draft()
+		if (text.trim() === '') return
+		props.onStashChange?.(pushStash(stashEntries(), text, Date.now()))
+		setDraft('')
+		editor?.setText('')
+		setLocalNotice(`DRAFT STASHED · ${stashEntries().length + 1} PARKED`)
+	}
+	const restoreStash = (index: number): void => {
+		const entry = stashEntries()[index]
+		if (entry === undefined) return
+		// Restoring removes it: a stash the user has taken from is a stash they
+		// are done with, and leaving copies behind turns it into a history.
+		props.onStashChange?.(dropStash(stashEntries(), index))
+		setDraft(entry.text)
+		editor?.setText(entry.text)
+		setStashOpen(false)
+		focusComposer()
+	}
 	const [paletteOpen, setPaletteOpen] = createSignal(false)
 	const [newSessionOpen, setNewSessionOpen] = createSignal(false)
 	const [modelsOpen, setModelsOpen] = createSignal(false)
@@ -834,6 +866,31 @@ export const TuiApp = (props: TuiAppProps) => {
 		if (key.eventType === 'release') return
 		if (props.visible?.() === false) return
 		if (paletteOpen() || newSessionOpen() || modelsOpen()) return
+		if (stashOpen()) {
+			key.preventDefault()
+			const entries = stashEntries()
+			if (key.name === 'escape' || (key.ctrl && key.name === 'p')) setStashOpen(false)
+			else if (key.name === 'j' || key.name === 'down')
+				setStashIndex((current) => Math.min(entries.length - 1, current + 1))
+			else if (key.name === 'k' || key.name === 'up') setStashIndex((current) => Math.max(0, current - 1))
+			else if (key.name === 'enter' || key.name === 'return') restoreStash(stashIndex())
+			else if (key.name === 'x' || key.name === 'delete') {
+				props.onStashChange?.(dropStash(entries, stashIndex()))
+				setStashIndex((current) => Math.max(0, Math.min(entries.length - 2, current)))
+			}
+			return
+		}
+		if (key.ctrl && key.name === 'p') {
+			key.preventDefault()
+			if (stashEntries().length === 0) {
+				setLocalNotice('NOTHING STASHED · ^S PARKS A DRAFT')
+				return
+			}
+			blurComposers()
+			setStashIndex(stashEntries().length - 1)
+			setStashOpen(true)
+			return
+		}
 		if (confirmSkill() !== null) {
 			key.preventDefault()
 			if (key.name === 'y') {
@@ -900,6 +957,13 @@ export const TuiApp = (props: TuiAppProps) => {
 				key.preventDefault()
 				blurComposers()
 				setNavigation((current) => ({ ...current, pane: 'events', level: 'pane' }))
+				return
+			}
+			if (key.ctrl && key.name === 's') {
+				// Park the draft. `ctrl+s` because the composer is a text field and
+				// that is what saving one means everywhere else.
+				key.preventDefault()
+				stashDraft()
 				return
 			}
 			if (key.name === 'tab' && key.shift) {
@@ -1291,10 +1355,14 @@ export const TuiApp = (props: TuiAppProps) => {
 								</box>
 								<box flexDirection="row" height={1} flexShrink={0}>
 									<text
-										fg={props.notice() === null ? tactical.color.grid : tactical.color.coreBright}
+										fg={
+											localNotice() === null && props.notice() === null
+												? tactical.color.grid
+												: tactical.color.coreBright
+										}
 										wrapMode="none"
 									>
-										{props.notice() ?? ''}
+										{localNotice() ?? props.notice() ?? ''}
 									</text>
 									<box flexGrow={1} />
 									<text fg={tactical.color.textDim} wrapMode="none">
@@ -1801,6 +1869,43 @@ export const TuiApp = (props: TuiAppProps) => {
 					{props.sessionId}
 				</text>
 			</box>
+			<Show when={stashOpen()}>
+				{/* Parked drafts. Newest last, because that is the order they were
+				    written in and the one the user is most likely to want back. */}
+				<box
+					position="absolute"
+					left={Math.max(2, Math.floor((dimensions().width - 72) / 2))}
+					top={4}
+					zIndex={40}
+					width={Math.min(72, Math.max(30, dimensions().width - 4))}
+					flexDirection="column"
+					border
+					borderStyle={tactical.chrome.frameStyle}
+					borderColor={tactical.color.coreBright}
+					backgroundColor={tactical.color.panel}
+					title=" STASHED DRAFTS "
+					titleColor={tactical.color.coreBright}
+				>
+					<Index each={stashEntries()}>
+						{(entry, index) => (
+							<box height={1} flexDirection="row" paddingLeft={1}>
+								<text
+									fg={index === stashIndex() ? tactical.color.coreBright : tactical.color.textDim}
+									wrapMode="none"
+									onMouseDown={() => restoreStash(index)}
+								>
+									{`${index === stashIndex() ? '▸ ' : '  '}${stashLabel(entry(), Math.min(60, Math.max(20, dimensions().width - 12)))}`}
+								</text>
+							</box>
+						)}
+					</Index>
+					<box height={1} paddingLeft={1} marginTop={1}>
+						<text fg={tactical.color.textFaint} wrapMode="none">
+							↵ RESTORE · X DELETE · J/K MOVE · ESC CLOSE
+						</text>
+					</box>
+				</box>
+			</Show>
 			<Show when={paletteOpen()}>
 				<CommandPalette commands={paletteCommands()} onClose={() => setPaletteOpen(false)} />
 			</Show>

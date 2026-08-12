@@ -11,6 +11,8 @@ import {
 	type ModelConfiguration,
 	type FoldConfig,
 	type ViewedPatchHashes,
+	readPromptStash,
+	writePromptStash,
 } from '@humanlayer/fold-agent'
 import { makeCodexAuth, makeCodexAuthStore } from '@humanlayer/fold-codex'
 import type { SessionId } from '@humanlayer/fold-core'
@@ -27,6 +29,7 @@ import { TuiApp } from './App'
 import { loadGitSnapshot, type GitSnapshot } from './GitChanges'
 import type { HostedTuiSession } from './HostedTuiSession'
 import { openUrlInBrowser } from './OpenUrl'
+import { parseStash, serializeStash, type StashEntry } from './PromptStash'
 import {
 	codexAuthStoreOptions,
 	openCodeAuthStoreOptions,
@@ -410,6 +413,24 @@ export const runTui = (
 		 * switches at 300 rows. Holding the last session keeps that subtree alive
 		 * and lets visibility, rather than existence, decide what is on screen.
 		 */
+		/**
+		 * Parked drafts, loaded once and written back whenever they change.
+		 *
+		 * Shared across sessions rather than scoped to one: what a user parks is
+		 * usually what they want in a different session.
+		 */
+		const [stash, setStash] = createSignal<ReadonlyArray<StashEntry>>([])
+		const stashLayoutOptions = options.foldHome === undefined ? {} : { foldHome: options.foldHome }
+		runFork(
+			readPromptStash(stashLayoutOptions).pipe(
+				Effect.tap((contents) => Effect.sync(() => setStash(parseStash(contents)))),
+			),
+		)
+		const updateStash = (entries: ReadonlyArray<StashEntry>): void => {
+			setStash(entries)
+			runFork(writePromptStash(serializeStash(entries), stashLayoutOptions))
+		}
+
 		const [mountedSession, setMountedSession] = createSignal<HostedTuiSession | null>(null)
 		createEffect(() => {
 			const current = active()
@@ -565,6 +586,8 @@ export const runTui = (
 													onConfigureModels={current().configureModels}
 													onBackToSessions={router.showPicker}
 													visible={() => active() !== null}
+													stash={stash}
+													onStashChange={updateStash}
 													onCopySessionId={() => {
 														const copied = renderer.copyToClipboardOSC52(
 															current().sessionId,
