@@ -18,9 +18,9 @@ export const PaneSpine = (props: {
 	readonly badge?: string
 	readonly onSelect?: () => void
 }) => {
-	// Two rows of the column are the box's own border, and the badge takes one
-	// more when present.
-	const rows = (): number => Math.max(0, props.height - 2 - (props.badge === undefined ? 0 : 1))
+	// Two rows are the box's own border, one is the `z` hint, and the badge takes
+	// one more when present.
+	const rows = (): number => Math.max(0, props.height - 3 - (props.badge === undefined ? 0 : 1))
 	return (
 		<box
 			width={3}
@@ -40,14 +40,19 @@ export const PaneSpine = (props: {
 					</text>
 				)}
 			</Index>
+			<box flexGrow={1} />
 			{props.badge === undefined ? null : (
-				<>
-					<box flexGrow={1} />
-					<text fg={theme.color.core} wrapMode="none">
-						{props.badge}
-					</text>
-				</>
+				<text fg={theme.color.core} wrapMode="none">
+					{props.badge}
+				</text>
 			)}
+			{/* The key that brings this pane back. A collapsed pane whose only
+			    affordance is a border tells the user nothing about how to undo it,
+			    and the person most likely to meet a spine is on a small terminal
+			    and has never pressed `z`. */}
+			<text fg={theme.color.textFaint} wrapMode="none">
+				z
+			</text>
 		</box>
 	)
 }

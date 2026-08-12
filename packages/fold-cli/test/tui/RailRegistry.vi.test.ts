@@ -42,12 +42,16 @@ const skill: SkillView = { name: 'diagnosing-bugs', description: 'find bugs', lo
 const base = { agents: [], skills: [], changes: [], configuration: undefined, touched }
 
 describe('railSectionsFor', () => {
-	/** An empty section is rows spent to say nothing. */
-	it('omits sections the session has nothing for', () => {
-		expect(railSectionsFor(base).map((section) => section.id)).toEqual(['subagents', 'settings'])
+	/**
+	 * Every section, always, in the same order. Omitting empty ones moved every
+	 * section below them whenever a file changed or a skill loaded.
+	 */
+	it('lists every section in a fixed order, empty or not', () => {
+		const order = ['subagents', 'skills', 'changes', 'models', 'settings']
+		expect(railSectionsFor(base).map((section) => section.id)).toEqual(order)
 	})
 
-	it('adds sections as the session acquires them', () => {
+	it('keeps the same order once the session acquires content', () => {
 		const full = railSectionsFor({
 			...base,
 			agents: [agent('done')],
@@ -67,6 +71,8 @@ describe('railSectionsFor', () => {
 			},
 		})
 		expect(full.map((section) => section.id)).toEqual(['subagents', 'skills', 'changes', 'models', 'settings'])
+		// An empty section carries no count, which is what dims it in the rail.
+		expect(railSectionsFor(base).find((section) => section.id === 'changes')?.count).toBeUndefined()
 	})
 
 	it('carries counts so a collapsed section still reports what is in it', () => {

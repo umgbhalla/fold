@@ -52,23 +52,25 @@ describe('railSections', () => {
 	})
 
 	/**
-	 * A subagent finishing while you are reading something else should pull its
-	 * section up, not let it decay because you have not clicked it.
+	 * Position is identity in a sidebar, so nothing reorders. Recency and
+	 * activity decide how much of a section is spelled out, never where it sits.
 	 */
-	it('promotes an active section above more recently visited ones', () => {
-		const withActive = six.map((item) => (item.id === 'logs' ? { ...item, active: true } : item))
-		expect(railSections(withActive, 40)[0]?.id).toBe('logs')
+	it('never reorders, whatever the recency', () => {
+		const order = six.map((item) => item.id)
+		expect(railSections(six, 40).map((view) => view.id)).toEqual(order)
+		const shuffledRecency = six.map((item, index) => ({ ...item, lastTouched: index }))
+		expect(railSections(shuffledRecency, 40).map((view) => view.id)).toEqual(order)
 	})
 
-	it('orders purely by recency when nothing is active', () => {
-		expect(railSections(six, 40).map((view) => view.id)).toEqual([
-			'subagents',
-			'skills',
-			'changes',
-			'settings',
-			'models',
-			'logs',
-		])
+	/**
+	 * A subagent finishing while you are reading something else earns its
+	 * section a name, without moving it up the column.
+	 */
+	it('spends detail on an active section without moving it', () => {
+		const withActive = six.map((item) => (item.id === 'logs' ? { ...item, active: true } : item))
+		const views = railSections(withActive, 30)
+		expect(views.map((view) => view.id)).toEqual(six.map((item) => item.id))
+		expect(views.find((view) => view.id === 'logs')?.detail).not.toBe('icon')
 	})
 
 	it('keeps counts so a collapsed section can still say what arrived', () => {

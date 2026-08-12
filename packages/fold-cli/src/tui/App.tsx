@@ -1546,7 +1546,9 @@ export const TuiApp = (props: TuiAppProps) => {
 													? tactical.color.coreBright
 													: section().active === true
 														? tactical.color.core
-														: tactical.color.textDim
+														: section().count === undefined
+															? tactical.color.textFaint
+															: tactical.color.textDim
 											}
 											onMouseDown={() => selectRailSection(section().id)}
 											wrapMode="none"

@@ -45,13 +45,14 @@ const labels: Readonly<Record<RailSectionId, string>> = {
 }
 
 /**
- * Which sections the session has, with their counts and activity.
+ * Every section, always, in a fixed order.
  *
- * A section with nothing in it is omitted rather than shown empty: a rail that
- * lists `CHANGES 0` in a clean worktree is spending rows to say nothing, and
- * the section reappears the moment there is something to see. Subagents and
- * settings are always present, because a session always has a root agent's
- * configuration and the roster is the rail's reason to exist.
+ * Omitting empty ones was the first design and it moved everything below them:
+ * the first edit to a file made a CHANGES section appear and pushed MODELS and
+ * SETTINGS down a slot, and committing pushed them back. That is the same
+ * spatial instability as reordering by recency, triggered by events the user
+ * did not initiate. An empty section costs three rows as a dimmed glyph and
+ * buys a rail whose positions never move.
  */
 export const railSectionsFor = (inputs: RailSectionInputs): ReadonlyArray<RailSection<RailSectionId>> => {
 	const sections: Array<RailSection<RailSectionId>> = []
@@ -67,33 +68,30 @@ export const railSectionsFor = (inputs: RailSectionInputs): ReadonlyArray<RailSe
 		...(inputs.agents.some((agent) => agent.status === 'running') ? { active: true } : {}),
 	})
 
-	if (inputs.skills.length > 0)
-		sections.push({
-			id: 'skills',
-			label: labels.skills,
-			icon: icons.skills,
-			lastTouched: inputs.touched.skills,
-			count: inputs.skills.length,
-		})
+	sections.push({
+		id: 'skills',
+		label: labels.skills,
+		icon: icons.skills,
+		lastTouched: inputs.touched.skills,
+		...(inputs.skills.length > 0 ? { count: inputs.skills.length } : {}),
+	})
 
-	if (inputs.changes.length > 0)
-		sections.push({
-			id: 'changes',
-			label: labels.changes,
-			icon: icons.changes,
-			lastTouched: inputs.touched.changes,
-			count: inputs.changes.length,
-		})
+	sections.push({
+		id: 'changes',
+		label: labels.changes,
+		icon: icons.changes,
+		lastTouched: inputs.touched.changes,
+		...(inputs.changes.length > 0 ? { count: inputs.changes.length } : {}),
+	})
 
 	const providerCount = inputs.configuration?.providers.length ?? 0
-	if (providerCount > 0)
-		sections.push({
-			id: 'models',
-			label: labels.models,
-			icon: icons.models,
-			lastTouched: inputs.touched.models,
-			count: providerCount,
-		})
+	sections.push({
+		id: 'models',
+		label: labels.models,
+		icon: icons.models,
+		lastTouched: inputs.touched.models,
+		...(providerCount > 0 ? { count: providerCount } : {}),
+	})
 
 	sections.push({
 		id: 'settings',

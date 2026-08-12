@@ -45,6 +45,9 @@ export type CollapsePolicy =
 
 export type PaneId = 'events' | 'context' | 'rail'
 
+/** The pane that holds content rather than an index of it. */
+const READER: PaneId = 'context'
+
 export type PaneSlot = {
 	readonly id: PaneId
 	readonly width: number
@@ -106,10 +109,10 @@ export const stackLayout = (
 	if (focused === null || policy === 'none' || !panes.includes(focused))
 		return panes.map((id) => ({ id, width: spread[id], mode: 'full' as const }))
 
-	const focusIndex = panes.indexOf(focused)
-	// `far` keeps the immediate neighbours readable; `all` keeps nobody.
-	const peeks =
-		policy === 'far' ? panes.filter((id, index) => id !== focused && Math.abs(index - focusIndex) === 1) : []
+	// `far` keeps the reader readable; `all` keeps nobody. Focusing the reader
+	// itself has nothing to pair with, so it behaves as `all`.
+	const peeks: ReadonlyArray<PaneId> =
+		policy === 'far' && focused !== READER ? panes.filter((id) => id === READER) : []
 
 	const modeFor = (id: PaneId): PaneRenderMode => (id === focused ? 'full' : peeks.includes(id) ? 'peek' : 'spine')
 

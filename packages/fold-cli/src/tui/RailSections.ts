@@ -75,8 +75,17 @@ export const railSections = <Id extends string>(
 ): ReadonlyArray<SectionView<Id>> => {
 	if (sections.length === 0 || height <= 0) return []
 
-	const ordered = [...sections].sort((left, right) => {
-		// Active first, then most recently touched.
+	// Order is the caller's, and it does not move.
+	//
+	// Sorting by recency was the first design and it was wrong: a sidebar's one
+	// advantage in a terminal is that position is identity, and reordering on
+	// every visit means "CHANGES is third" expires the next time you open
+	// SETTINGS. Recency still decides how much of each section is spelled out,
+	// which is the part that buys space, without moving anything.
+	const ordered = sections
+
+	// Recency only ranks who gets detail first.
+	const byRecency = [...sections].sort((left, right) => {
 		if (left.active !== right.active) return left.active === true ? -1 : 1
 		return right.lastTouched - left.lastTouched
 	})
@@ -96,7 +105,7 @@ export const railSections = <Id extends string>(
 	// obvious order and the wrong one: six abbreviations consumed the budget and
 	// nothing ever reached `full`, so the column read as six unlabelled stubs.
 	// Depth before breadth is what makes the top of the column a readable word.
-	for (const section of ordered) {
+	for (const section of byRecency) {
 		for (const level of ['full', 'short'] as const) {
 			const current = detail.get(section.id) ?? 'icon'
 			if (current === level) break
