@@ -511,7 +511,7 @@ export const runTui = (
 										</Show>
 									</box>
 									<box flexGrow={1} flexDirection="column" visible={active() !== null}>
-										<Show when={active()}>
+										<Show when={mountedSession()}>
 											{(current: Accessor<HostedTuiSession>) => (
 												<TuiApp
 													state={current().state}
